@@ -18,25 +18,53 @@ shinyUI(fluidPage(
 
   # Main Application
   fluidRow(
-    column(5,
+    column(4,
            tabsetPanel(
              tabPanel("Data",
                       div(
-                        p("Import Data File"),
-                        fileInput('InCell', label="InCell Output File"),
-                        br(),
+                        conditionalPanel(
+                          condition="output.fileUploaded",
+                          fileInput('InCell', label=h4("Import InCell Data File"))
+                          ),
+                        conditionalPanel(
+                          condition="!output.fileUploaded",
+                          h4('Current Dataset:'),
+                          verbatimTextOutput('dataset'),
+                          hr(),
+                          h4("Dowload Individual Data Tables"),
+                          fluidRow(
+                            column(6, p("Well Level Data")),
+                            column(6,  downloadButton('downWell', label="Download"))
+                            ),
+                          br(),
+                          fluidRow(
+                            column(6, p("Field Level Data")),
+                            column(6,  downloadButton('downField', label="Download"))
+                            ),
+                          br(),
+                          fluidRow(
+                            column(6, p("Cell Level Data")),
+                            column(6,  downloadButton('downCell', label="Download"))
+                            )
+                        ),
                         actionButton('console', label="Show Console"),
                         class="well tab-well"
                       )),
-             tabPanel("Next",
+             tabPanel("Well",
                       div(
-                        p("Next Tab"),
+                        selectizeInput('wellColumn', label=h4("Heatmap Data"),
+                                       choices=c("Cell Count"),
+                                       selected="Cell Count", width="100%"),
+                        hr(),
+                        verbatimTextOutput('wellData'),
+                        hr(),
+                        plotOutput('miniHist', height="250px"),
                         class="well tab-well")),
              position='left'
            )),
-    column(7,
-           h5("Cell Number"),
-           plotOutput('heatmap'))
+    column(8,
+           plotOutput('heatmap', height="500px")
+           )
   ),
   tags$head(
     tags$style("

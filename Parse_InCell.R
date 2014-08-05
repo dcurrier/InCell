@@ -15,7 +15,7 @@ ReadInCell = function(file, tables=c("cell", "field", "well"), progressBar=FALSE
   # Make the output list
   out = vector("list", length(tables))
   names(out) = tables
-  browser()
+
   # Find the Cell and Field Level data section
   if( any(c("cell", "field") %in% tables) ){
     well.field = grep("[[:upper:]] - [[:digit:]]+\\(fld [[:digit:]]+\\)", temp)
@@ -42,6 +42,7 @@ ReadInCell = function(file, tables=c("cell", "field", "well"), progressBar=FALSE
                             if(t==""){b}else{paste(t,b,sep="-")}
                           }, head1, head2, SIMPLIFY=F, USE.NAMES=F))
     names(cellData) = header
+    cellData = cellData[, !is.na(names(cellData))]
 
     out[["cell"]] = cellData
   }
@@ -63,6 +64,7 @@ ReadInCell = function(file, tables=c("cell", "field", "well"), progressBar=FALSE
                             if(t==""){b}else{paste(t,b,sep="-")}
                           }, head1, head2, SIMPLIFY=F, USE.NAMES=F))
     names(fieldData) = header
+    fieldData = fieldData[, !is.na(names(fieldData))]
 
     out[["field"]] = fieldData
   }
@@ -87,6 +89,7 @@ ReadInCell = function(file, tables=c("cell", "field", "well"), progressBar=FALSE
                             if(t==""){b}else{paste(t,b,sep="-")}
                           }, head1, head2, SIMPLIFY=F, USE.NAMES=F))
     names(wellData) = header
+    wellData = wellData[, !is.na(names(wellData))]
 
     out[["well"]] = wellData
   }
