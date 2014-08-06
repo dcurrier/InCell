@@ -22,10 +22,18 @@ shinyServer(function(input, output, session) {
         setProgress(message='Parsing InCell File')
         data = ReadInCell(input$InCell[1,'datapath'], progressBar=TRUE )
 
-        # Update the
+        # Update Selectize Inputs
         updateSelectizeInput(session, 'wellColumn',
                              choices = names(data$well)[which(names(data$well) != "Well")],
                              selected="Cell Count")
+
+        updateSelectizeInput(session, 'fieldColumn',
+                             choices = names(data$well)[which(names(data$well) != "Well")],
+                             selected="Cell Count")
+
+        updateSelectizeInput(session, 'fieldWell',
+                             choices = as.character(data$well$Well),
+                             selected=as.character(data$well$Well[1]))
 
         return(data)
       })
@@ -162,7 +170,65 @@ shinyServer(function(input, output, session) {
     }
   })
 
+  output$fieldwisePlot = renderPlot({
+    if( !(is.null(input$InCell)) && !(is.null(InCell()$field)) ){
+      #browser()
+      d = eval(parse(text=paste("InCell()$field$`", input$fieldColumn,"`", sep="")))
 
+      l = mapply(function(well){
+        index = grep(paste0(well, "[[:punct:]]"), InCell()$field$Well)
+        return(d[index])
+      }, as.character(InCell()$well$Well), SIMPLIFY=F, USE.NAMES=F)
+      names(l) = as.character(InCell()$well$Well)
+
+      chosen = grep(paste0(input$fieldWell, "$"), names(l))
+
+      if(max(d) > 1) par(mar=c(6,2,6,0), bg=rgb(0,0,0,0))
+      if(max(d) > 100) par(mar=c(6,3,6,0), bg=rgb(0,0,0,0))
+      if(max(d) > 1000) par(mar=c(6,4,6,0), bg=rgb(0,0,0,0))
+      stripchart(l, vertical = T, col="#58849e",
+                 pch=16, las=1, axes=F,
+                 main=input$fieldColumn)
+      points(chosen, l[chosen], pch=16, cex=2, col="#bd0000")
+      axis(2, las=1)
+      axis(1, at=c(seq(1, 384, by=24), 384), labels=names(l)[c(seq(1, 384, by=24), 384)])
+      box()
+    }
+  })
+  outputOptions(output, 'fieldwisePlot', suspendWhenHidden=FALSE)
+
+  output$miniFieldData = renderPlot({
+    if( !(is.null(input$InCell)) && !(is.null(InCell()$field)) ){
+      if(input$fieldColumn != "Cell Count"){
+        d = eval(parse(text=paste("InCell()$cell$`", input$fieldColumn,"`", sep="")))
+        fieldNames = as.character(unique( InCell()$field$Well[grep( paste0(input$fieldWell, "[[:punct:]]"), InCell()$field$Well )] ))
+
+        l = mapply(function(field){
+          field = gsub("\\(", "\\\\(", field)
+          field = gsub("\\)", "\\\\)", field)
+          index = grep(field, InCell()$cell$Well)
+          eval(parse(text=paste("InCell()$cell$`", input$fieldColumn,"`[index]", sep="")))
+        }, fieldNames, SIMPLIFY=F, USE.NAMES=F)
+        names(l) = fieldNames
+
+
+
+        par(mar=c(5, 4, 4, 2)+0.1, bg=rgb(0,0,0,0))
+        stripchart(l, vertical=T, method="jitter", jitter=1, pch=16, col="#58849e",
+                   las=1, main=input$fieldColumn)
+        axis(1, at=1:length(l), label=names(l))
+      }else{
+        par(mar=c(5, 4, 4, 2)+0.1, bg=rgb(0,0,0,0))
+      }
+    }
+  })
+
+  output$fieldSummary = renderText({
+    paste0(
+      "Number of Cells: "
+
+      )
+  })
 
   ############### Observers ###############
 
@@ -177,7 +243,12 @@ shinyServer(function(input, output, session) {
     }
   })
 
+  observe({
+    updateSelectizeInput(session, 'fieldColumn', selected=input$wellColumn)
+  })
 
-
+  observe({
+    updateSelectizeInput(session, 'wellColumn', selected=input$fieldColumn)
+  })
 
 })

@@ -31,7 +31,7 @@ shinyUI(fluidPage(
                           h4('Current Dataset:'),
                           verbatimTextOutput('dataset'),
                           hr(),
-                          h4("Dowload Individual Data Tables"),
+                          h4("Download Individual Tables"),
                           fluidRow(
                             column(6, p("Well Level Data")),
                             column(6,  downloadButton('downWell', label="Download"))
@@ -60,11 +60,29 @@ shinyUI(fluidPage(
                         hr(),
                         plotOutput('miniHist', height="250px"),
                         class="well tab-well")),
+             tabPanel("Field",
+                      div(
+                        selectizeInput('fieldColumn', label=h4("Data to Plot"),
+                                       choices=c("Cell Count"),
+                                       selected="Cell Count", width="100%"),
+                        selectizeInput('fieldWell', label=h4("Well of Interest"),
+                                       choices=c("A1"), selected="A1", width="100%"),
+                        hr(),
+                        h5("Cell Level Detail"),
+                        plotOutput('miniFieldData', height="350px"),
+                        verbatimTextOutput('FieldSummary'),
+                        class="well tab-well")),
+             tabPanel("Cell",
+                      div(
+
+                        class="well tab-well")),
              position='left'
            )),
     column(8,
-           plotOutput('heatmap', height="500px")
-           )
+           carouselPanel(
+              plotOutput('heatmap', height="500px"),
+              plotOutput('fieldwisePlot', height="500px")
+           ))
   ),
   tags$head(
     tags$style("
