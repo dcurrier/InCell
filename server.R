@@ -10,6 +10,7 @@ library(shinyIncubator)    # Progress indicator
 library(shinythings)       # Password Input/Better Action buttons
 library(plotrix)           # Heatmap
 source("Parse_InCell.R")
+source("Parse_REMP_PlateLookup.R")
 
 shinyServer(function(input, output, session) {
 
@@ -23,11 +24,7 @@ shinyServer(function(input, output, session) {
         data = ReadInCell(input$InCell[1,'datapath'], progressBar=TRUE )
 
         # Update Selectize Inputs
-        updateSelectizeInput(session, 'wellColumn',
-                             choices = names(data$well)[which(names(data$well) != "Well")],
-                             selected="Cell Count")
-
-        updateSelectizeInput(session, 'fieldColumn',
+        updateSelectizeInput(session, 'featureCol',
                              choices = names(data$well)[which(names(data$well) != "Well")],
                              selected="Cell Count")
 
@@ -42,6 +39,35 @@ shinyServer(function(input, output, session) {
     }
   })
 
+  REMP = reactive({
+    if( !is.null(input$annotation) ){
+      # Get the datapath
+      path = input$annotation[1, 'datapath']
+
+      # Parse the control column input
+      ctlString = input$ctlCols
+      if( ctlString == "example: 21-24 or 21,22,23,24" ){
+        ctl = 21:24
+      }else{
+        ctlString = gsub("[[:lower:]]", "", ctlString)
+        ctlString = gsub("[[:upper:]]", "", ctlString)
+        ctlString = gsub("[[:digit:]] [[:digit:]]", ",", ctlString)
+        ctlString = gsub("-", ":", ctlString)
+        ctlString = gsub(" ", "", ctlString)
+        ctl = eval(parse( text=paste0("c(", ctlString, ")") ))
+      }
+
+      # Parse the annotation file
+      t = Parse_REMP(path, ctl)
+
+      # Update selectize input for compound names
+      updateSelectizeInput(session, 'cmpdSelect',
+                           choices = unique(as.character(t$SAMPLE[which(t$SAMPLE != "DMSO")])),
+                           selected = unique(as.character(t$SAMPLE[which(t$SAMPLE != "DMSO")]))[1] )
+
+      return(t)
+    }
+  })
 
 
 
@@ -107,13 +133,13 @@ shinyServer(function(input, output, session) {
   # Statistics section of Well tab
   output$wellData = renderText({
     # Generate parameter distribution statistics
-    v = eval(parse(text=paste0('InCell()$well$`',input$wellColumn, '`')))
+    v = eval(parse(text=paste0('InCell()$well$`',input$featureCol, '`')))
     stats = as.list(summary(v))
 
     # make output
     paste0(
       "Summary Statistics for\n",
-      input$wellColumn, "\n",
+      input$featureCol, "\n",
       " Min: ", stats$Min, "\n",
       " 1st Quartile: ", stats$`1st Qu.`, "\n",
       " Median: ", stats$Median, "\n",
@@ -126,11 +152,11 @@ shinyServer(function(input, output, session) {
   # Mini Histogram in Well tab
   output$miniHist = renderPlot({
     if( !is.null(InCell()$well) ){
-      v = eval(parse(text=paste0('InCell()$well$`',input$wellColumn, '`')))
+      v = eval(parse(text=paste0('InCell()$well$`',input$featureCol, '`')))
       par(mar=c(3, 4, 6, 2)+0.1, bg=rgb(0,0,0,0), fg="#333333")
       hist(v,
            col="#58849e",
-           main=paste0("Histogram of\n", input$wellColumn),
+           main=paste0("Histogram of\n", input$featureCol),
            xlab="",
            ylab="Freq",
            las=1,
@@ -138,6 +164,70 @@ shinyServer(function(input, output, session) {
            col.axis="#333333",
            col.lab="#333333",
            col.main="#000000")
+    }else{
+      par(mar=c(5, 4, 4, 2)+0.1, bg=rgb(0,0,0,0))
+    }
+  })
+
+
+  ## Field Tab ##
+  output$miniFieldData = renderPlot({
+    if( !(is.null(input$InCell)) && !(is.null(InCell()$field)) ){
+      if(input$featureCol != "Cell Count"){
+        d = eval(parse(text=paste("InCell()$cell$`", input$featureCol,"`", sep="")))
+        fieldNames = as.character(unique( InCell()$field$Well[grep( paste0(input$fieldWell, "[[:punct:]]"), InCell()$field$Well )] ))
+
+        l = mapply(function(field){
+          field = gsub("\\(", "\\\\(", field)
+          field = gsub("\\)", "\\\\)", field)
+          index = grep(field, InCell()$cell$Well)
+          eval(parse(text=paste("InCell()$cell$`", input$featureCol,"`[index]", sep="")))
+        }, fieldNames, SIMPLIFY=F, USE.NAMES=F)
+        names(l) = fieldNames
+
+
+
+        par(mar=c(5, 4, 4, 2)+0.1, bg=rgb(0,0,0,0))
+        stripchart(l, vertical=T, method="jitter", jitter=1, pch=16, col="#58849e",
+                   las=1, main=input$fieldColumn)
+        axis(1, at=1:length(l), label=names(l))
+      }else{
+        par(mar=c(5, 4, 4, 2)+0.1, bg=rgb(0,0,0,0))
+      }
+    }else{
+      par(mar=c(5, 4, 4, 2)+0.1, bg=rgb(0,0,0,0))
+    }
+  })
+
+  output$fieldSummary = renderText({
+    paste0(
+      "Number of Cells: ",
+      "Add calculation"
+    )
+  })
+
+
+
+  ## Feature Tab ##
+  output$concSlide = renderUI({
+    if( !is.null(REMP()) && !is.null(input$cmpdSelect) && input$cmpdSelect != ""){
+      count = length(REMP()$CONC[which(REMP()$SAMPLE == input$cmpdSelect)])
+      sliderInput('conc', label=h4("Concentration"),
+                  value=ceiling(count/2), min=1, max=count, step=1)
+    }
+  })
+
+  output$selConc = renderText({
+    if( !is.null(input$conc) ){
+      value = as.numeric(REMP()$CONC[which(REMP()$SAMPLE == input$cmpdSelect)][input$conc])
+      paste0(round(value, digits=0), " uM")
+    }
+  })
+
+  output$statSummary = renderText({
+    if( !is.null(REMP()) && !is.null(input$cmpdSelect) ){
+
+
     }
   })
 
@@ -149,14 +239,14 @@ shinyServer(function(input, output, session) {
   output$heatmap = renderPlot({
     if( !(is.null(input$InCell)) && !(is.null(InCell()$well)) ){
       #browser()
-      d = matrix(eval(parse(text=paste("InCell()$well$`", input$wellColumn,"`", sep=""))),
+      d = matrix(eval(parse(text=paste("InCell()$well$`", input$featureCol,"`", sep=""))),
                  nrow=16, ncol=24, byrow=T)
       par(mar=c(6,2,6,0), bg=rgb(0,0,0,0))
       color2D.matplot(d,
                       show.values = FALSE,
                       show.legend = TRUE,
                       axes = FALSE,
-                      main = input$wellColumn,
+                      main = input$featureCol,
                       xlab = "",
                       ylab = "",
                       vcex = 1,
@@ -169,11 +259,12 @@ shinyServer(function(input, output, session) {
            labels = LETTERS[16:1], tick = FALSE, las = 1)
     }
   })
+  outputOptions(output, 'heatmap', suspendWhenHidden=FALSE)
 
   output$fieldwisePlot = renderPlot({
     if( !(is.null(input$InCell)) && !(is.null(InCell()$field)) ){
       #browser()
-      d = eval(parse(text=paste("InCell()$field$`", input$fieldColumn,"`", sep="")))
+      d = eval(parse(text=paste("InCell()$field$`", input$featureCol,"`", sep="")))
 
       l = mapply(function(well){
         index = grep(paste0(well, "[[:punct:]]"), InCell()$field$Well)
@@ -188,7 +279,7 @@ shinyServer(function(input, output, session) {
       if(max(d) > 1000) par(mar=c(6,4,6,0), bg=rgb(0,0,0,0))
       stripchart(l, vertical = T, col="#58849e",
                  pch=16, las=1, axes=F,
-                 main=input$fieldColumn)
+                 main=input$featureCol)
       points(chosen, l[chosen], pch=16, cex=2, col="#bd0000")
       axis(2, las=1)
       axis(1, at=c(seq(1, 384, by=24), 384), labels=names(l)[c(seq(1, 384, by=24), 384)])
@@ -197,38 +288,15 @@ shinyServer(function(input, output, session) {
   })
   outputOptions(output, 'fieldwisePlot', suspendWhenHidden=FALSE)
 
-  output$miniFieldData = renderPlot({
-    if( !(is.null(input$InCell)) && !(is.null(InCell()$field)) ){
-      if(input$fieldColumn != "Cell Count"){
-        d = eval(parse(text=paste("InCell()$cell$`", input$fieldColumn,"`", sep="")))
-        fieldNames = as.character(unique( InCell()$field$Well[grep( paste0(input$fieldWell, "[[:punct:]]"), InCell()$field$Well )] ))
-
-        l = mapply(function(field){
-          field = gsub("\\(", "\\\\(", field)
-          field = gsub("\\)", "\\\\)", field)
-          index = grep(field, InCell()$cell$Well)
-          eval(parse(text=paste("InCell()$cell$`", input$fieldColumn,"`[index]", sep="")))
-        }, fieldNames, SIMPLIFY=F, USE.NAMES=F)
-        names(l) = fieldNames
 
 
 
-        par(mar=c(5, 4, 4, 2)+0.1, bg=rgb(0,0,0,0))
-        stripchart(l, vertical=T, method="jitter", jitter=1, pch=16, col="#58849e",
-                   las=1, main=input$fieldColumn)
-        axis(1, at=1:length(l), label=names(l))
-      }else{
-        par(mar=c(5, 4, 4, 2)+0.1, bg=rgb(0,0,0,0))
-      }
-    }
-  })
 
-  output$fieldSummary = renderText({
-    paste0(
-      "Number of Cells: "
 
-      )
-  })
+
+
+
+
 
   ############### Observers ###############
 
@@ -250,5 +318,49 @@ shinyServer(function(input, output, session) {
   observe({
     updateSelectizeInput(session, 'wellColumn', selected=input$fieldColumn)
   })
+
+  observe({
+    updateSelectizeInput(session, 'featureColumn', selected=input$wellColumn)
+  })
+
+  observe({
+    # Get the well coordinates
+    cmpd = input$cmpdSelect
+    well = REMP()$well[which(REMP()$SAMPLE == cmpd)[input$conc]]
+
+    # Convert to alternative format
+    well = sub("([[:upper:]])", "\\1 - ", well, perl = T)
+
+    updateSelectizeInput(session, 'fieldWell', selected=well)
+  })
+
+  if( TRUE ){
+    observe({
+      if( input$prv > 0 ){
+        isolate({
+          cList = unique(as.character(REMP()$SAMPLE[which(REMP()$SAMPLE != "DMSO")]))
+          n = which(cList == input$cmpdSelect[1])-1
+          if( n <= 0 ) {n = 1}
+          newName = cList[n]
+        })
+        #browser()
+        updateSelectizeInput(session, 'cmpdSelect', selected=newName )
+      }
+    }) # Previous
+
+    observe({
+      if( input$nxt > 0 ){
+        isolate({
+          cList = unique(as.character(REMP()$SAMPLE[which(REMP()$SAMPLE != "DMSO")]))
+          n = which(cList == input$cmpdSelect[1])+1
+          if( n > length(cList) ) {n = length(cList)}
+          newName = cList[n]
+        })
+        #browser()
+        updateSelectizeInput(session, 'cmpdSelect', selected=newName )
+      }
+    }) # Next
+
+  }  # Previous/Next compound navigation
 
 })

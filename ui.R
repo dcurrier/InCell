@@ -47,26 +47,20 @@ shinyUI(fluidPage(
                             column(6,  downloadButton('downCell', label="Download"))
                             )
                         ),
+                        br(),
                         actionButton('console', label="Show Console"),
                         class="well tab-well"
                       )),
              tabPanel("Well",
                       div(
-                        selectizeInput('wellColumn', label=h4("Heatmap Data"),
-                                       choices=c("Cell Count"),
-                                       selected="Cell Count", width="100%"),
-                        hr(),
                         verbatimTextOutput('wellData'),
                         hr(),
                         plotOutput('miniHist', height="250px"),
                         class="well tab-well")),
              tabPanel("Field",
                       div(
-                        selectizeInput('fieldColumn', label=h4("Data to Plot"),
-                                       choices=c("Cell Count"),
-                                       selected="Cell Count", width="100%"),
-                        selectizeInput('fieldWell', label=h4("Well of Interest"),
-                                       choices=c("A1"), selected="A1", width="100%"),
+                        selectizeInput('fieldWell', label=h4("Choose a Well"),
+                                       choices=c("A - 1"), selected="A - 1"),
                         hr(),
                         h5("Cell Level Detail"),
                         plotOutput('miniFieldData', height="350px"),
@@ -74,15 +68,46 @@ shinyUI(fluidPage(
                         class="well tab-well")),
              tabPanel("Cell",
                       div(
-
+                        class="well tab-well")),
+             tabPanel("Feature",
+                      div(
+                        fileInput('annotation', label=h4("REMP Plate Lookup File")),
+                        textInput('ctlCols', label=h4("Control Columns"), value="example: 21-24 or 21,22,23,24"),
+                        fluidRow(
+                          column(9, uiOutput('concSlide')),
+                          column(3, div(verbatimTextOutput('selConc'), style="margin-top: 21px"))
+                        ),
+                        hr(),
+                        selectizeInput('cmpdSelect', label=h4("Select a Compound"),
+                                       choices=c(""), selected=""),
+                        fluidRow(
+                          column(6, div( actionButton('prv', label='', styleclass='primary',
+                                                      icon='chevron-left', icon.library='font awesome'),
+                                         class="pull-left")),
+                          column(6, div( actionButton('nxt', label='', styleclass='primary',
+                                                      icon='chevron-right', icon.library='font awesome'),
+                                         class="pull-right"))
+                        ),
+                        hr(),
+                        verbatimTextOutput('statSummary'),
                         class="well tab-well")),
              position='left'
            )),
     column(8,
-           carouselPanel(
-              plotOutput('heatmap', height="500px"),
-              plotOutput('fieldwisePlot', height="500px")
-           ))
+           fluidRow(
+             carouselPanel(
+                plotOutput('heatmap', height="500px"),
+                plotOutput('fieldwisePlot', height="500px")
+             ))
+           ),
+           fluidRow(
+             column(3,
+                    wellPanel(div(
+                      selectizeInput('featureCol', label=h4("Select a Feature"),
+                                      choices=c("Cell Count"),
+                                      selected="Cell Count", width="100%"),
+                        style="height: 99px;")))
+             )
   ),
   tags$head(
     tags$style("
