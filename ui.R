@@ -24,7 +24,8 @@ shinyUI(fluidPage(
                       div(
                         conditionalPanel(
                           condition="output.fileUploaded",
-                          fileInput('InCell', label=h4("Import InCell Data File"))
+                          fileInput('InCell', label=h4("Import InCell Data File")),
+                          fileInput('annotation', label=h4("REMP Plate Lookup File"))
                           ),
                         conditionalPanel(
                           condition="!output.fileUploaded",
@@ -60,7 +61,7 @@ shinyUI(fluidPage(
              tabPanel("Field",
                       div(
                         selectizeInput('fieldWell', label=h4("Choose a Well"),
-                                       choices=c("A - 1"), selected="A - 1"),
+                                       choices=c("A01"), selected="A - 1"),
                         hr(),
                         h5("Cell Level Detail"),
                         plotOutput('miniFieldData', height="350px"),
@@ -71,7 +72,6 @@ shinyUI(fluidPage(
                         class="well tab-well")),
              tabPanel("Feature",
                       div(
-                        fileInput('annotation', label=h4("REMP Plate Lookup File")),
                         textInput('ctlCols', label=h4("Control Columns"), value="example: 21-24 or 21,22,23,24"),
                         fluidRow(
                           column(9, uiOutput('concSlide')),
@@ -89,7 +89,12 @@ shinyUI(fluidPage(
                                          class="pull-right"))
                         ),
                         hr(),
-                        verbatimTextOutput('statSummary'),
+                        fluidRow(
+                          column(6, h5("Negative Controls"),
+                                    verbatimTextOutput('ctlStatSummary')),
+                          column(6, h5("Selected Well"),
+                                    verbatimTextOutput('cmpdStatSummary'))
+                        ),
                         class="well tab-well")),
              position='left'
            )),
@@ -97,7 +102,8 @@ shinyUI(fluidPage(
            fluidRow(
              carouselPanel(
                 plotOutput('heatmap', height="500px"),
-                plotOutput('fieldwisePlot', height="500px")
+                plotOutput('fieldwisePlot', height="500px"),
+                plotOutput('featureDistPlot', height="500px")
              ))
            ),
            fluidRow(

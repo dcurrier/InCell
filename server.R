@@ -11,6 +11,7 @@ library(shinythings)       # Password Input/Better Action buttons
 library(plotrix)           # Heatmap
 source("Parse_InCell.R")
 source("Parse_REMP_PlateLookup.R")
+source("Analysis_Helpers.R")
 
 shinyServer(function(input, output, session) {
 
@@ -32,6 +33,8 @@ shinyServer(function(input, output, session) {
                              choices = as.character(data$well$Well),
                              selected=as.character(data$well$Well[1]))
 
+
+
         return(data)
       })
     }else{
@@ -39,6 +42,7 @@ shinyServer(function(input, output, session) {
     }
   })
 
+  # Store compound annotations as a table
   REMP = reactive({
     if( !is.null(input$annotation) ){
       # Get the datapath
@@ -69,6 +73,53 @@ shinyServer(function(input, output, session) {
     }
   })
 
+  # Neg Control Distributions
+  negCtrlDist = reactive({
+    if( is.null(InCell()) || is.null(REMP()) ) return()
+
+    withProgress(session, min=0, max=1, {
+      setProgress(message='Calculating Negative Control Distributions')
+
+      # Get the list of negative control wells
+      negCtrlWells = REMP()$well[which(REMP()$SAMPLE == "DMSO")]
+
+      setProgress(value=0.01)
+      negStats=mapply(function(feature, name){
+
+        # Tabulate the ks and cvmts statistics for each well
+        t=mapply(function(well){
+          x = feature[[well]]
+          y = unlist(
+            mapply(function(negWell, well){
+              if(negWell != well) feature[[negWell]]
+            }, as.character(negCtrlWells), well, SIMPLIFY=T, USE.NAMES=F))
+
+          list(ks=suppressWarnings(f_ks(x,y)), cvmts=f_cvmts(x,y))
+        }, as.character(negCtrlWells), SIMPLIFY=T, USE.NAMES=T)
+
+        # Set progress bar
+        setProgress(value=which(names(InCell()$cellList) == name)/length(names(InCell()$cellList)), detail=name)
+
+        # Make list of negCtl Statistics for each feature
+        list( table=t,
+              ks.median=median( unlist(t["ks", ]) ),
+              ks.mad=mad( unlist(t["ks", ]) ),
+              ks.mean=mean( unlist(t["ks", ]) ),
+              ks.sd=sd( unlist(t["ks", ]) ),
+              cvmts.median=median( unlist(t["cvmts", ]) ),
+              cvmts.mean=mean( unlist(t["cvmts", ]) ),
+              cvmts.mad=mad( unlist(t["cvmts", ]) ),
+              cvmts.sd=sd( unlist(t["cvmts", ]) )
+              )
+
+      }, InCell()$cellList, names(InCell()$cellList), SIMPLIFY=F, USE.NAMES=T)
+
+      setProgress(value=0.99, detail="wrapping up")
+
+      return(negStats)
+    })
+  })
+
 
 
 
@@ -78,7 +129,12 @@ shinyServer(function(input, output, session) {
 
   # Tests for a file upload
   output$fileUploaded <- reactive({
-    return(is.null(InCell()))
+    if( is.null(InCell()) || is.null(REMP()) ){
+      return(T)
+    }else{
+      return(F)
+    }
+
   })
   outputOptions(output, 'fileUploaded', suspendWhenHidden=FALSE)
 
@@ -175,11 +231,9 @@ shinyServer(function(input, output, session) {
     if( !(is.null(input$InCell)) && !(is.null(InCell()$field)) ){
       if(input$featureCol != "Cell Count"){
         d = eval(parse(text=paste("InCell()$cell$`", input$featureCol,"`", sep="")))
-        fieldNames = as.character(unique( InCell()$field$Well[grep( paste0(input$fieldWell, "[[:punct:]]"), InCell()$field$Well )] ))
+        fieldNames = as.character(unique( InCell()$field$Well[grep(input$fieldWell, InCell()$field$Well )] ))
 
         l = mapply(function(field){
-          field = gsub("\\(", "\\\\(", field)
-          field = gsub("\\)", "\\\\)", field)
           index = grep(field, InCell()$cell$Well)
           eval(parse(text=paste("InCell()$cell$`", input$featureCol,"`[index]", sep="")))
         }, fieldNames, SIMPLIFY=F, USE.NAMES=F)
@@ -224,10 +278,22 @@ shinyServer(function(input, output, session) {
     }
   })
 
-  output$statSummary = renderText({
-    if( !is.null(REMP()) && !is.null(input$cmpdSelect) ){
+  output$ctlStatSummary = renderText({
+    if( !is.null(REMP()) && !is.null(input$cmpdSelect) &&
+          !is.null(negCtrlDist()) && input$featureCol != "Cell Count" ){
+      paste0(
+        "Kolmogorov-Smirnov:\n",
+        "Median: ", round(negCtrlDist()[[input$featureCol]]$ks.median, digits=2), "\n",
+        "MAD: ", round(negCtrlDist()[[input$featureCol]]$ks.mad, digits=2), "\n",
+        "Mean: ", round(negCtrlDist()[[input$featureCol]]$ks.mean, digits=2), "\n",
+        "SD: ", round(negCtrlDist()[[input$featureCol]]$ks.sd, digits=2), "\n\n",
 
-
+        "CVMTS: \n",
+        "Median: ", round(negCtrlDist()[[input$featureCol]]$cvmts.median, digits=2), "\n",
+        "MAD: ", round(negCtrlDist()[[input$featureCol]]$cvmts.mad, digits=2), "\n",
+        "Mean: ", round(negCtrlDist()[[input$featureCol]]$cvmts.mean, digits=2), "\n",
+        "SD: ", round(negCtrlDist()[[input$featureCol]]$cvmts.sd, digits=2)
+        )
     }
   })
 
@@ -261,13 +327,14 @@ shinyServer(function(input, output, session) {
   })
   outputOptions(output, 'heatmap', suspendWhenHidden=FALSE)
 
+  # Plot of each field
   output$fieldwisePlot = renderPlot({
     if( !(is.null(input$InCell)) && !(is.null(InCell()$field)) ){
       #browser()
       d = eval(parse(text=paste("InCell()$field$`", input$featureCol,"`", sep="")))
 
       l = mapply(function(well){
-        index = grep(paste0(well, "[[:punct:]]"), InCell()$field$Well)
+        index = grep(well, InCell()$field$Well)
         return(d[index])
       }, as.character(InCell()$well$Well), SIMPLIFY=F, USE.NAMES=F)
       names(l) = as.character(InCell()$well$Well)
@@ -288,6 +355,58 @@ shinyServer(function(input, output, session) {
   })
   outputOptions(output, 'fieldwisePlot', suspendWhenHidden=FALSE)
 
+  # Plot of the feature of interest distribution
+  output$featureDistPlot = renderPlot({
+    if( !is.null(InCell()) && !is.null(REMP()) && !is.null(negCtrlDist()) ){
+
+      # Get the list of negative control wells
+      negCtrlWells = REMP()$well[which(REMP()$SAMPLE == "DMSO")]
+
+
+      x = InCell()$cellList[[input$featureCol]][[input$fieldWell]]
+      y = unlist(
+        mapply(function(negWell, well){
+          if(negWell != well) InCell()$cellList[[input$featureCol]][[negWell]]
+        }, as.character(negCtrlWells), input$fieldWell, SIMPLIFY=T, USE.NAMES=F))
+
+      #Calculate the statistics
+      ks=suppressWarnings(f_ks(x,y))
+      cvmts=f_cvmts(x,y)
+
+      # Calculate breaks
+      breaks=hist(c(x,y), plot = FALSE, breaks = 100)$breaks
+
+      # Draw Histogram of DMSO Wells
+      hist( y,
+            freq=F,
+            breaks=breaks,
+            lwd = 0.5,
+            ylab = "", xlab = "",
+            main = input$cmpdSelect,
+            axes = FALSE,
+            ylim = c(0, max(c(pretty(density(y)$y), pretty(density(x)$y)))),
+            col="red",
+            border="red"
+            )
+
+      mtext(paste("KS =", round(ks, 2),
+                  "CVMTS =", round(cvmts, 2),
+                  "n =", length(x)), side = 1, cex = 0.5)
+
+      hist( x,
+            freq=F,
+            breaks=breaks,
+            add=T,
+            col="blue",
+            border="blue")
+
+      lines(density(y), lwd = 2, col = "red")
+      lines(density(x), lwd = 2, col = "blue")
+
+      # NEED TO CHANGE COLORS TO LOOK NICER AND ADJUST MTEXT CEX
+    }
+  })
+  outputOptions(output, 'featureDistPlot', suspendWhenHidden=FALSE)
 
 
 
@@ -327,9 +446,6 @@ shinyServer(function(input, output, session) {
     # Get the well coordinates
     cmpd = input$cmpdSelect
     well = REMP()$well[which(REMP()$SAMPLE == cmpd)[input$conc]]
-
-    # Convert to alternative format
-    well = sub("([[:upper:]])", "\\1 - ", well, perl = T)
 
     updateSelectizeInput(session, 'fieldWell', selected=well)
   })
