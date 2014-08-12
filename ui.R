@@ -60,9 +60,6 @@ shinyUI(fluidPage(
                         class="well tab-well")),
              tabPanel("Field",
                       div(
-                        selectizeInput('fieldWell', label=h4("Choose a Well"),
-                                       choices=c("A01"), selected="A - 1"),
-                        hr(),
                         h5("Cell Level Detail"),
                         plotOutput('miniFieldData', height="350px"),
                         verbatimTextOutput('FieldSummary'),
@@ -74,8 +71,8 @@ shinyUI(fluidPage(
                       div(
                         textInput('ctlCols', label=h4("Control Columns"), value="example: 21-24 or 21,22,23,24"),
                         fluidRow(
-                          column(9, uiOutput('concSlide')),
-                          column(3, div(verbatimTextOutput('selConc'), style="margin-top: 21px"))
+                          column(8, uiOutput('concSlide')),
+                          column(4, div(verbatimTextOutput('selConc'), style="margin-top: 21px"))
                         ),
                         hr(),
                         selectizeInput('cmpdSelect', label=h4("Select a Compound"),
@@ -89,11 +86,16 @@ shinyUI(fluidPage(
                                          class="pull-right"))
                         ),
                         hr(),
+                        h5("Negative Controls"),
                         fluidRow(
-                          column(6, h5("Negative Controls"),
-                                    verbatimTextOutput('ctlStatSummary')),
+                                 column(6,verbatimTextOutput('ksStatSummary')),
+                                 column(6,verbatimTextOutput('cvmtsStatSummary'))
+                        ),
+                        fluidRow(
                           column(6, h5("Selected Well"),
-                                    verbatimTextOutput('cmpdStatSummary'))
+                                    verbatimTextOutput('cmpdStatSummary')),
+                          column(6, h5("Selected Compound"),
+                                    plotOutput('cmpdZplot', height="161px"))
                         ),
                         class="well tab-well")),
              position='left'
@@ -103,7 +105,8 @@ shinyUI(fluidPage(
              carouselPanel(
                 plotOutput('heatmap', height="500px"),
                 plotOutput('fieldwisePlot', height="500px"),
-                plotOutput('featureDistPlot', height="500px")
+                plotOutput('featureDistPlot', height="500px"),
+                plotOutput('featureDistGrid', height="500px")
              ))
            ),
            fluidRow(
@@ -112,7 +115,9 @@ shinyUI(fluidPage(
                       selectizeInput('featureCol', label=h4("Select a Feature"),
                                       choices=c("Cell Count"),
                                       selected="Cell Count", width="100%"),
-                        style="height: 99px;")))
+                      selectizeInput('fieldWell', label=h4("Choose a Well"),
+                                     choices=c("A01"), selected="A01"),
+                        style="height: 169px;")))
              )
   ),
   tags$head(
@@ -126,7 +131,7 @@ shinyUI(fluidPage(
                  }
                  .tab-well{
                   border-radius: 0px 4px 4px 4px;
-                  height:630px;
+                  height:700px;
                  }
                  .color{
                   width: 60px;

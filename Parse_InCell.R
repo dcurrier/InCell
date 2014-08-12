@@ -21,7 +21,7 @@ ReadInCell = function(file, tables=c("cell", "field", "well"), progressBar=FALSE
     well.field = grep("[[:upper:]] - [[:digit:]]+\\(fld [[:digit:]]+\\)", temp)
 
     # Find headers
-    cellHead = grep("Well,Cell", temp)
+    cellHead = grep("Well,", temp)[which(grep("Well,", temp) < min(well.field))]
     fieldHead = grep("Well,", temp)[which(grep("Well,", temp) %in% min(well.field):max(well.field))]
   }
 
