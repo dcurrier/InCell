@@ -41,3 +41,11 @@ f_ks <- function(x, y) {
   return(ks)
 }
 ## # # # # # ##  # ## # # # # # ### # # # # # ##  # ## # # # # # ### # # # # # ##  # ## # # # # # ### # # # # # ##  # ## # # # # # #
+
+## # # # # # ##  # ## # # # # # ### # # # # # ##  # ## # # # # # ### # # # # # ##  # ## # # # # # ### # # # # # ##  # ## # # # # # #
+is.even <- function(x){
+  if( !(typeof(x) %in% c("integer", "double")) ) stop("argument 'x' must be an integer")
+  if( typeof(x) == "double" && floor(x) != x ) stop("argument 'x' must be an integer")
+  x %% 2 == 0
+}
+## # # # # # ##  # ## # # # # # ### # # # # # ##  # ## # # # # # ### # # # # # ##  # ## # # # # # ### # # # # # ##  # ## # # # # # #

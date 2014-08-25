@@ -43,10 +43,16 @@ ReadInCell = function(file, tables=c("cell", "field", "well"), progressBar=FALSE
                           }, head1, head2, SIMPLIFY=F, USE.NAMES=F))
     names(cellData) = header
     cellData = cellData[, !is.na(names(cellData))]
-    cellData$Well = gsub("([[:upper:]]) - ([[:digit:]]{2})([[:punct:]]fld [[:digit:]]+[[:punct:]])", paste0("\\1","\\2"), cellData$Well)
-    cellData$Well = gsub("([[:upper:]]) - ([[:digit:]]{1})([[:punct:]]fld [[:digit:]]+[[:punct:]])", paste0("\\1","0\\2"), cellData$Well)
+    # Parse Well names
+    wellID = gsub("([[:upper:]]) - ([[:digit:]]{2})([[:punct:]]fld [[:digit:]]+[[:punct:]])", paste0("\\1","\\2"), cellData$Well)
+    wellID = gsub("([[:upper:]]) - ([[:digit:]]{1})([[:punct:]]fld [[:digit:]]+[[:punct:]])", paste0("\\1","0\\2"), wellID)
 
+    # Parse Field IDs
+    fieldID = gsub("([[:upper:]] - [[:digit:]]+)[[:punct:]]fld ([[:digit:]]+)[[:punct:]]", paste0("\\2"), cellData$Well)
 
+    # Append to table
+    cellData = data.frame(Well=wellID, Field=fieldID, cellData[, which(names(cellData) != "Well")])
+    names(cellData) = c("Well", "Field", header[-1])
     out[["cell"]] = cellData
 
     # Update Progress Bar
@@ -54,14 +60,14 @@ ReadInCell = function(file, tables=c("cell", "field", "well"), progressBar=FALSE
 
 
     # Split the Cell Level data into a list of lists
-    dataCols = names(out$cell)[!(names(out$cell) %in% c("Well", "Cell"))]
+    dataCols = names(out$cell)[!(names(out$cell) %in% c("Well", "Field", "Cell"))]
 
     # Reformat Cell table to a list of features, each containing a list of the wells, each containing a vector of the values
     feature=mapply(function(col){
       w=mapply(function(well){
         # Get the values for the current column
         eval(parse(text=paste0("out$cell$`",col,"`[which(out$cell$Well == '",well,"')]")))
-      }, unique(out$cell$Well), SIMPLIFY=T, USE.NAMES=T)
+      }, as.character(unique(out$cell$Well)), SIMPLIFY=T, USE.NAMES=T)
       #names(w) = unique(out$cell$Well)
 
       # Update Progress Bar
@@ -93,10 +99,16 @@ ReadInCell = function(file, tables=c("cell", "field", "well"), progressBar=FALSE
                           }, head1, head2, SIMPLIFY=F, USE.NAMES=F))
     names(fieldData) = header
     fieldData = fieldData[, !is.na(names(fieldData))]
-    fieldData$Well = gsub("([[:upper:]]) - ([[:digit:]]{2})([[:punct:]]fld [[:digit:]]+[[:punct:]])", paste0("\\1","\\2"), fieldData$Well)
-    fieldData$Well = gsub("([[:upper:]]) - ([[:digit:]]{1})([[:punct:]]fld [[:digit:]]+[[:punct:]])", paste0("\\1","0\\2"), fieldData$Well)
+    # Parse Well names
+    wellID = gsub("([[:upper:]]) - ([[:digit:]]{2})([[:punct:]]fld [[:digit:]]+[[:punct:]])", paste0("\\1","\\2"), fieldData$Well)
+    wellID = gsub("([[:upper:]]) - ([[:digit:]]{1})([[:punct:]]fld [[:digit:]]+[[:punct:]])", paste0("\\1","0\\2"), wellID)
 
+    # Parse Field IDs
+    fieldID = gsub("([[:upper:]] - [[:digit:]]+)[[:punct:]]fld ([[:digit:]]+)[[:punct:]]", paste0("\\2"), fieldData$Well)
 
+    # Append to table
+    fieldData = data.frame(Well=wellID, Field=fieldID, fieldData[, which(names(fieldData) != "Well")])
+    names(fieldData) = c("Well", "Field", header[-1])
     out[["field"]] = fieldData
   }
 

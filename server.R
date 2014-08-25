@@ -5,10 +5,11 @@
 # http://shiny.rstudio.com
 #
 
-library(shiny)             # Shiny Framework
-library(shinyIncubator)    # Progress indicator
-library(shinythings)       # Password Input/Better Action buttons
-library(plotrix)           # Heatmap
+require(shiny)             # Shiny Framework
+require(shinyIncubator)    # Progress indicator
+require(shinythings)       # Password Input/Better Action buttons
+require(zoo)               # AUC Analysis
+require(ShinyHighCharts)   # Javascript charting
 source("Parse_InCell.R")
 source("Parse_REMP_PlateLookup.R")
 source("Analysis_Helpers.R")
@@ -19,9 +20,63 @@ noDataPlot = function(){
   text(1,1 , labels="No Data to Display", cex=2, col="#919191")
 }
 
+getDropboxFiles = function(){
+  if( file.exists("Y:/instrument/HTS Instruments QC and Study/InCell 6000/ShinyDropbox") ){
+    path = "Y:/instrument/HTS Instruments QC and Study/InCell 6000/ShinyDropbox"
+  }
+
+  if( file.exists("Z:/instrument/HTS Instruments QC and Study/InCell 6000/ShinyDropbox") ){
+    path = "Z:/instrument/HTS Instruments QC and Study/InCell 6000/ShinyDropbox"
+  }
+
+  if( file.exists( "/media/sf_ShinyDropbox" ) ){
+    path = "/media/sf_ShinyDropbox"
+  }
+
+  # Get list of files in the folder
+  allFiles = list.files(path)
+
+  # Get list of csv Files
+  csvFiles = mapply(function(f){
+    splt = strsplit(f, "[.]")[[1]]
+    type = splt[length(splt)]
+    if( type %in% c("csv", "CSV") ){
+      info = file.info(paste0(path, "/", f))
+      list(path=paste0(path, "/", f), size=info[1, 'size']/1000000)
+    }
+  },allFiles, SIMPLIFY=F, USE.NAMES=T)
+  csvFiles[sapply(csvFiles, is.null)] <- NULL
+
+  #get List of txt Files
+  txtFiles = mapply(function(f){
+    splt = strsplit(f, "[.]")[[1]]
+    type = splt[length(splt)]
+    if( type %in% c("txt", "TXT") ){
+      info = file.info(paste0(path, "/", f))
+      list(path=paste0(path, "/", f), size=info[1, 'size']/1000000)
+    }
+  },allFiles, SIMPLIFY=F, USE.NAMES=T)
+  txtFiles[sapply(txtFiles, is.null)] <- NULL
+
+  # Return the lists of files
+  list(csv=csvFiles, txt=txtFiles)
+}
+
 shinyServer(function(input, output, session) {
 
+
+
   ############### Reactives ###############
+
+  # Get Dropbox File List
+  Dropbox = reactive({
+    input$updateDropbox
+    getDropboxFiles()
+  })
+
+
+
+
 
   # Store InCell Data as a list
   InCell = reactive({
@@ -34,13 +89,28 @@ shinyServer(function(input, output, session) {
         updateSelectizeInput(session, 'featureCol',
                              choices = names(data$well)[which(names(data$well) != "Well")],
                              selected="Cell Count")
-
         updateSelectizeInput(session, 'fieldWell',
                              choices = as.character(data$well$Well),
                              selected=as.character(data$well$Well[1]))
+        # Return
+        return(data)
+      })
+    }else if( !is.null(input$InCellDB) && input$InCellDB != "InCell File" ){
+      withProgress(session, min=0, max=1, {
+        setProgress(message='Parsing InCell File')
+        data = ReadInCell(Dropbox()$csv[[input$InCellDB]]$path, progressBar=TRUE )
 
-
-
+        # Update Selectize Inputs
+        updateSelectizeInput(session, 'featureCol',
+                             choices = names(data$well)[which(names(data$well) != "Well")],
+                             selected="Cell Count")
+        updateSelectizeInput(session, 'featureColDist',
+                             choices = names(data$well)[which(names(data$well) != "Well")],
+                             selected="Cell Count")
+        updateSelectizeInput(session, 'fieldWell',
+                             choices = as.character(data$well$Well),
+                             selected=as.character(data$well$Well[1]))
+        # Return
         return(data)
       })
     }else{
@@ -76,6 +146,33 @@ shinyServer(function(input, output, session) {
                            selected = unique(as.character(t$SAMPLE[which(t$SAMPLE != "DMSO")]))[1] )
 
       return(t)
+    }else if( !is.null(input$annotationDB) && input$annotationDB != "REMP File" ){
+      # Get the datapath
+      path = Dropbox()$txt[[input$annotationDB]]$path
+
+      # Parse the control column input
+      ctlString = input$ctlCols
+      if( ctlString == "example: 21-24 or 21,22,23,24" ){
+        ctl = 21:24
+      }else{
+        ctlString = gsub("[[:lower:]]", "", ctlString)
+        ctlString = gsub("[[:upper:]]", "", ctlString)
+        ctlString = gsub("[[:digit:]] [[:digit:]]", ",", ctlString)
+        ctlString = gsub("-", ":", ctlString)
+        ctlString = gsub(" ", "", ctlString)
+        ctl = eval(parse( text=paste0("c(", ctlString, ")") ))
+      }
+
+      # Parse the annotation file
+      t = Parse_REMP(path, ctl)
+
+      # Update selectize input for compound names
+      updateSelectizeInput(session, 'cmpdSelect',
+                           choices = unique(as.character(t$SAMPLE[which(t$SAMPLE != "DMSO")])),
+                           selected = unique(as.character(t$SAMPLE[which(t$SAMPLE != "DMSO")]))[1] )
+      return(t)
+    }else{
+      NULL
     }
   })
 
@@ -90,7 +187,8 @@ shinyServer(function(input, output, session) {
       negCtrlWells = REMP()$well[which(REMP()$SAMPLE == "DMSO")]
 
       setProgress(value=0.01)
-      negStats=mapply(function(feature, name){
+      negStats=mapply(function(name){
+        feature=InCell()$cellList[[name]]
 
         # Tabulate the ks and cvmts statistics for each well
         t=mapply(function(well){
@@ -118,7 +216,7 @@ shinyServer(function(input, output, session) {
               cvmts.sd=sd( unlist(t["cvmts", ]) )
               )
 
-      }, InCell()$cellList, names(InCell()$cellList), SIMPLIFY=F, USE.NAMES=T)
+      }, names(InCell()$cellList), SIMPLIFY=F, USE.NAMES=T)
 
       setProgress(value=0.99, detail="wrapping up")
 
@@ -128,7 +226,8 @@ shinyServer(function(input, output, session) {
 
   doseCurveStats = reactive({
     if( is.null(REMP()) || is.null(input$cmpdSelect) || is.null(InCell()) ||
-          is.null(input$featureCol) || is.null(negCtrlDist()) )  return()
+          (is.null(input$featureColDist) && !(input$featureColDist %in% names(InCell()$cellList)))
+          || is.null(negCtrlDist()) )  return()
 
     # Get the list of the wells that the selected compound is in
     conc = as.numeric(REMP()$CONC[which(REMP()$SAMPLE == input$cmpdSelect)])
@@ -140,12 +239,12 @@ shinyServer(function(input, output, session) {
 
     y = unlist(
       mapply(function(negWell){
-        InCell()$cellList[[input$featureCol]][[negWell]]
+        InCell()$cellList[[input$featureColDist]][[negWell]]
       }, as.character(negCtrlWells), SIMPLIFY=T, USE.NAMES=F))
 
     d=mapply(function(w, c){
       # Get the values for the stat tests
-      x = InCell()$cellList[[input$featureCol]][[w]]
+      x = InCell()$cellList[[input$featureColDist]][[w]]
       if( length(x) < 1 ){
         ks=NA
         cvmts=NA
@@ -155,8 +254,8 @@ shinyServer(function(input, output, session) {
         cvmts=f_cvmts(x,y)
       }
       # Z Transform
-      ks.z=(ks - negCtrlDist()[[input$featureCol]]$ks.median)/negCtrlDist()[[input$featureCol]]$ks.mad
-      cvmts.z=(cvmts - negCtrlDist()[[input$featureCol]]$cvmts.median)/negCtrlDist()[[input$featureCol]]$cvmts.mad
+      ks.z=(ks - negCtrlDist()[[input$featureColDist]]$ks.median)/negCtrlDist()[[input$featureColDist]]$ks.mad
+      cvmts.z=(cvmts - negCtrlDist()[[input$featureColDist]]$cvmts.median)/negCtrlDist()[[input$featureColDist]]$cvmts.mad
 
       # Calculate z transformed cell number
       DMSO = which(InCell()$well$Well %in% REMP()$well[which(REMP()$SAMPLE == "DMSO")])
@@ -190,20 +289,26 @@ shinyServer(function(input, output, session) {
 
   # Statistics secton of Data tab
   output$dataset = renderText({
-    paste0(
-      "Data File:\n",
-      " ",input$InCell[1,'name'], "\n\n",
-      "Total Wells: ", dim(InCell()$well)[1], "\n",
-      "Total Cells Counted: ", format(dim(InCell()$cell)[1], big.mark=","), "\n",
-      "Total Fields: ", dim(InCell()$field)[1], "\n",
-      "Mean Fields Per Well: ", dim(InCell()$field)[1]/dim(InCell()$well)[1], "\n\n"
-    )
+    if( !is.null(input$InCell) ) name = input$InCell[1,'name']
+    if( input$InCellDB != "InCell File" ) name = input$InCellDB
+
+    if( exists('name') && !is.null(name) ){
+      paste0(
+        "Data File:\n",
+        " ",name, "\n\n",
+        "Total Wells: ", dim(InCell()$well)[1], "\n",
+        "Total Cells Counted: ", format(dim(InCell()$cell)[1], big.mark=","), "\n",
+        "Total Fields: ", dim(InCell()$field)[1], "\n",
+        "Mean Fields Per Well: ", dim(InCell()$field)[1]/dim(InCell()$well)[1], "\n\n"
+      )
+    }
   })
 
   # Download Handler for Well Level Data
   output$downWell = downloadHandler(
     filename = function(){
-      name = strsplit(input$InCell[1,'name'], "[.]")[[1]]
+      if( !is.null(input$InCell) ) name = strsplit(input$InCell[1,'name'], "[.]")[[1]]
+      if( input$InCellDB != "InCell File" ) name = strsplit(input$InCellDB, "[.]")[[1]]
       paste(paste(name[1:length(name)-1], collapse="."), "-Well.csv", sep = "")
     },
     content = function(file){
@@ -214,7 +319,8 @@ shinyServer(function(input, output, session) {
   # Download Handler for Field Level Data
   output$downField = downloadHandler(
     filename = function(){
-      name = strsplit(input$InCell[1,'name'], "[.]")[[1]]
+      if( !is.null(input$InCell) ) name = strsplit(input$InCell[1,'name'], "[.]")[[1]]
+      if( input$InCellDB != "InCell File" ) name = strsplit(input$InCellDB, "[.]")[[1]]
       paste(paste(name[1:length(name)-1], collapse="."), "-Field.csv", sep = "")
     },
     content = function(file){
@@ -225,7 +331,8 @@ shinyServer(function(input, output, session) {
   # Download Handler for Cell Level Data
   output$downCell = downloadHandler(
     filename = function(){
-      name = strsplit(input$InCell[1,'name'], "[.]")[[1]]
+      if( !is.null(input$InCell) ) name = strsplit(input$InCell[1,'name'], "[.]")[[1]]
+      if( input$InCellDB != "InCell File" ) name = strsplit(input$InCellDB, "[.]")[[1]]
       paste(paste(name[1:length(name)-1], collapse="."), "-Cell.csv", sep = "")
     },
     content = function(file){
@@ -234,7 +341,7 @@ shinyServer(function(input, output, session) {
   )
 
 
-  ## Well Tab ##
+  ## QC Tab ##
 
   # Statistics section of Well tab
   output$wellData = renderText({
@@ -255,88 +362,19 @@ shinyServer(function(input, output, session) {
     )
   })
 
-  # Mini Histogram in Well tab
-  output$miniHist = renderPlot({
-    if( !is.null(InCell()$well) ){
-      v = eval(parse(text=paste0('InCell()$well$`',input$featureCol, '`')))
-      par(mar=c(3, 4, 6, 2)+0.1, bg=rgb(0,0,0,0), fg="#333333")
-      hist(v,
-           col="#58849e",
-           main=paste0("Histogram of\n", input$featureCol),
-           xlab="",
-           ylab="Freq",
-           las=1,
-           border="#BBBBBB",
-           col.axis="#333333",
-           col.lab="#333333",
-           col.main="#000000")
-    }else{
-      par(mar=c(5, 4, 4, 2)+0.1, bg=rgb(0,0,0,0))
-    }
-  })
-
-
-  ## Field Tab ##
-  output$miniFieldData = renderPlot({
-    if( !(is.null(input$InCell)) && !(is.null(InCell()$field)) ){
-      if(input$featureCol != "Cell Count"){
-        d = eval(parse(text=paste("InCell()$cell$`", input$featureCol,"`", sep="")))
-        fieldNames = as.character(unique( InCell()$field$Well[grep(input$fieldWell, InCell()$field$Well )] ))
-
-        l = mapply(function(field){
-          index = grep(field, InCell()$cell$Well)
-          eval(parse(text=paste("InCell()$cell$`", input$featureCol,"`[index]", sep="")))
-        }, fieldNames, SIMPLIFY=F, USE.NAMES=F)
-        names(l) = fieldNames
-
-
-
-        par(mar=c(5, 4, 4, 2)+0.1, bg=rgb(0,0,0,0))
-        stripchart(l, vertical=T, method="jitter", jitter=1, pch=16, col="#58849e",
-                   las=1, main=input$fieldColumn)
-        axis(1, at=1:length(l), label=names(l))
-      }else{
-        par(mar=c(5, 4, 4, 2)+0.1, bg=rgb(0,0,0,0))
-      }
-    }else{
-      par(mar=c(5, 4, 4, 2)+0.1, bg=rgb(0,0,0,0))
-    }
-  })
-
-  output$fieldSummary = renderText({
-    paste0(
-      "Number of Cells: ",
-      "Add calculation"
-    )
-  })
-
 
 
   ## Feature Tab ##
-  output$concSlide = renderUI({
-    if( !is.null(REMP()) && !is.null(input$cmpdSelect) && input$cmpdSelect != ""){
-      count = length(REMP()$CONC[which(REMP()$SAMPLE == input$cmpdSelect)])
-      sliderInput('conc', label=h4("Concentration"),
-                  value=ceiling(count/2), min=1, max=count, step=1)
-    }
-  })
-
-  output$selConc = renderText({
-    if( !is.null(input$conc) ){
-      value = as.numeric(REMP()$CONC[which(REMP()$SAMPLE == input$cmpdSelect)][input$conc])
-      paste0(round(value, digits=0), " nM")
-    }
-  })
-
   output$ksStatSummary = renderText({
     if( !is.null(REMP()) && !is.null(input$cmpdSelect) &&
-          !is.null(negCtrlDist()) && input$featureCol != "Cell Count" ){
+          !is.null(negCtrlDist()) && !is.null(input$featureColDist) &&
+          input$featureColDist %in% names(InCell()$cellList) ){
       paste0(
         "K-S Test\n",
-        "Median: ", round(negCtrlDist()[[input$featureCol]]$ks.median, digits=2), "\n",
-        "MAD: ", round(negCtrlDist()[[input$featureCol]]$ks.mad, digits=2), "\n",
-        "Mean: ", round(negCtrlDist()[[input$featureCol]]$ks.mean, digits=2), "\n",
-        "SD: ", round(negCtrlDist()[[input$featureCol]]$ks.sd, digits=2)
+        "Median: ", round(negCtrlDist()[[input$featureColDist]]$ks.median, digits=2), "\n",
+        "MAD: ", round(negCtrlDist()[[input$featureColDist]]$ks.mad, digits=2), "\n",
+        "Mean: ", round(negCtrlDist()[[input$featureColDist]]$ks.mean, digits=2), "\n",
+        "SD: ", round(negCtrlDist()[[input$featureColDist]]$ks.sd, digits=2)
         )
     }else{
       paste0(  "    Statistics\n\n   not available\n"  )
@@ -345,13 +383,14 @@ shinyServer(function(input, output, session) {
 
   output$cvmtsStatSummary = renderText({
     if( !is.null(REMP()) && !is.null(input$cmpdSelect) &&
-          !is.null(negCtrlDist()) && input$featureCol != "Cell Count" ){
+          !is.null(negCtrlDist()) && !is.null(input$featureColDist) &&
+          input$featureColDist %in% names(InCell()$cellList) ){
       paste0(
         "CVMTS Test\n",
-        "Median: ", round(negCtrlDist()[[input$featureCol]]$cvmts.median, digits=2), "\n",
-        "MAD: ", round(negCtrlDist()[[input$featureCol]]$cvmts.mad, digits=2), "\n",
-        "Mean: ", round(negCtrlDist()[[input$featureCol]]$cvmts.mean, digits=2), "\n",
-        "SD: ", round(negCtrlDist()[[input$featureCol]]$cvmts.sd, digits=2)
+        "Median: ", round(negCtrlDist()[[input$featureColDist]]$cvmts.median, digits=2), "\n",
+        "MAD: ", round(negCtrlDist()[[input$featureColDist]]$cvmts.mad, digits=2), "\n",
+        "Mean: ", round(negCtrlDist()[[input$featureColDist]]$cvmts.mean, digits=2), "\n",
+        "SD: ", round(negCtrlDist()[[input$featureColDist]]$cvmts.sd, digits=2)
       )
     }else{
       paste0(  "    Statistics\n\n   not available\n"  )
@@ -360,13 +399,13 @@ shinyServer(function(input, output, session) {
 
   output$cmpdStatSummary = renderText({
     if( !is.null(InCell()) && !is.null(REMP()) && !is.null(negCtrlDist())
-        && input$featureCol != 'Cell Count' ){
+        && input$featureColDist %in% names(InCell()$cellList) ){
 
       # Get the list of negative control wells
       negCtrlWells = REMP()$well[which(REMP()$SAMPLE == "DMSO")]
 
 
-      x = InCell()$cellList[[input$featureCol]][[input$fieldWell]]
+      x = InCell()$cellList[[input$featureColDist]][[input$fieldWell]]
       if( length(x) < 1 ){
         # Print stats
         paste0(
@@ -379,7 +418,7 @@ shinyServer(function(input, output, session) {
       }else{
         y = unlist(
           mapply(function(negWell, well){
-            if(negWell != well) InCell()$cellList[[input$featureCol]][[negWell]]
+            if(negWell != well) InCell()$cellList[[input$featureColDist]][[negWell]]
           }, as.character(negCtrlWells), input$fieldWell, SIMPLIFY=T, USE.NAMES=F))
 
         #Calculate the statistics
@@ -389,9 +428,9 @@ shinyServer(function(input, output, session) {
         # Print stats
         paste0(
           "K-S: ", round(ks, 2), "\n",
-          "z: ", round((ks - negCtrlDist()[[input$featureCol]]$ks.median)/negCtrlDist()[[input$featureCol]]$ks.mad, 2), "\n\n",
+          "z: ", round((ks - negCtrlDist()[[input$featureColDist]]$ks.median)/negCtrlDist()[[input$featureColDist]]$ks.mad, 2), "\n\n",
           "CVMTS: ", round(cvmts, 2), "\n",
-          "z: ", round((cvmts - negCtrlDist()[[input$featureCol]]$cvmts.median)/negCtrlDist()[[input$featureCol]]$cvmts.mad, 2), "\n\n",
+          "z: ", round((cvmts - negCtrlDist()[[input$featureColDist]]$cvmts.median)/negCtrlDist()[[input$featureColDist]]$cvmts.mad, 2), "\n\n",
           "n: ", length(x)
           )
       }
@@ -400,291 +439,507 @@ shinyServer(function(input, output, session) {
     }
   })
 
-  output$cmpdZplot = renderPlot({
-    if( is.null(doseCurveStats()) || input$featureCol == "Cell Count" ) return()
-
-    # get the z stat vectors
-    ks.z = unlist(doseCurveStats()['ks.z', ])
-    cvmts.z = unlist(doseCurveStats()['cvmts.z', ])
-    conc = unlist(doseCurveStats()['conc', ])
-    cells = unlist(doseCurveStats()['cellNum', ])
-
-    par(mar=c(4,2,2,0)+0.1, bg=rgb(0,0,0,0))
-
-    plot(x=log10(conc/1000), y=ks.z,
-         las=1,
-         type="l",
-         bty="n",
-         lwd=3,
-         ylim=c(min(c(ks.z,cvmts.z,cells), na.rm=T),max(c(ks.z,cvmts.z,cells), na.rm=T)),
-         ylab="",
-         xlab="log10 Conc [nM]",
-         col="#2A6373"
-    )
-
-    points(x=log10(conc/1000), y=cvmts.z,
-           type="l", lwd=3, col="#DD8702"
-           )
-
-    points(x=log10(conc/1000), y=cells,
-           type="l", lwd=3, col="#C1C1C1" )
-
-  })
 
 
 
-  ## Main Panel ##
+  ############### Main Panel ###############
+  ## QC Tab ##
+  # Large Heatmap
+  output$highHeat = renderHighcharts({
+    if( !is.null(InCell()$well) ){
+      rows = rep(c(0:15), 24)
 
-  # Main Heatmap data output
-  output$heatmap = renderPlot({
-    if( !(is.null(input$InCell)) && !(is.null(InCell()$well)) ){
-      #browser()
-      d = matrix(eval(parse(text=paste("InCell()$well$`", input$featureCol,"`", sep=""))),
-                 nrow=16, ncol=24, byrow=T)
-      par(mar=c(6,2,6,0), bg=rgb(0,0,0,0))
-      color2D.matplot(d,
-                      show.values = FALSE,
-                      show.legend = TRUE,
-                      axes = FALSE,
-                      main = input$featureCol,
-                      xlab = "",
-                      ylab = "",
-                      vcex = 1,
-                      vcol = "#FF3526",
-                      extremes = c("#FFFFFF", "#00436B") # http://adobe.ly/1nMjd54
+      cols = vector()
+      for(i in 0:23){
+        cols = c(cols, rep(i, 16))
+      }
+
+      name = paste0(rep(LETTERS[1:16], 24), unlist(mapply(function(i){rep(i,16)},1:24, SIMPLIFY=F, USE.NAMES=F)))
+
+      values = eval(parse(text=paste("InCell()$well$`", input$featureCol,"`", sep="")))
+
+      data = data.frame(cols,rows,values,name)
+
+      # Highcharts options
+      myChart=list(
+        credits=list(
+          enabled=FALSE
+        ),
+
+        chart=list(
+          type='heatmap'
+        ),
+
+        title=list(
+          text=input$featureCol,
+          align='left'
+        ),
+
+        subtitle=list(
+          text="Well-level averages",
+          align='left'
+        ),
+
+        xAxis=list(
+          categories=as.character(1:24),
+          opposite=TRUE,
+          lineWidth=0,
+          minorGridLineWidth=0,
+          minorTickLength=0,
+          tickLength=0,
+          lineColor='transparent'
+        ),
+
+        yAxis=list(
+          reversed=TRUE,
+          categories=LETTERS[1:16],
+          lineWidth=0,
+          minorGridLineWidth=0,
+          minorTickLength=0,
+          tickLength=0,
+          lineColor='transparent',
+          title=list(
+            text=""
+          )
+        ),
+
+        colorAxis=list(
+          min=min(data$values),
+          minColor='#ffffff',
+          maxColor=getHighchartsColors()[1]
+        ),
+
+        legend=list(
+          align='right',
+          layout='vertical',
+          margin=0,
+          symbolHeight=320
+        ),
+
+        tooltip=list(
+          headerFormat='{series.name} <br/>',
+          pointFormat='{point.name}: <b>{point.value}</b><br/>'
+        ),
+
+        series=list(
+          list(
+            name=input$featureCol,
+            borderWidth=1,
+            data=JSONify(data, element.names=c("x", "y", "value", "name"))
+          )
+        )
       )
-      axis(3, at = seq_len(ncol(d)) - 0.5,
-           labels = as.character(1:24), tick = FALSE)
-      axis(2, at = seq_len(nrow(d)) -0.5,
-           labels = LETTERS[16:1], tick = FALSE, las = 1)
-    }else{
-      noDataPlot()
+
+      return( list(chart=myChart) )
+    }
+  } )
+
+  # Mini Histogram
+  output$miniHist = renderHighcharts({
+    if( !is.null(InCell()$well) ){
+      v = eval(parse(text=paste0('InCell()$well$`',input$featureCol, '`')))
+      h=hist(v, plot=F)
+
+      # Highcharts options
+      myChart=list(
+        credits=list(
+          enabled=FALSE
+        ),
+        chart=list(
+          type='column'
+        ),
+
+        title=list(
+          text=""
+        ),
+
+        subtitle=list(
+          text="Histogram of Well Mean",
+          align='left'
+        ),
+
+        xAxis=list(
+          categories=as.character(h$breaks),
+          labels=list(
+            rotation=270
+            )
+        ),
+
+        yAxis=list(
+          title=list(
+            text="Frequency"
+          )
+        ),
+
+        legend=list(
+          enabled=FALSE
+        ),
+
+        plotOptions=list(
+          series=list(
+            groupPadding=0.1,
+            pointPadding=0
+          )
+        ),
+
+        tooltip=list(
+          headerFormat="{series.name}<br/>",
+          pointFormat="<b>{point.y}</b><br/>"
+        ),
+
+        series=list(
+          list(
+            name=input$featureCol,
+            data=h$counts
+          )
+        )
+      )
+
+      return( list(chart=myChart) )
     }
   })
-  outputOptions(output, 'heatmap', suspendWhenHidden=FALSE)
 
-  # Plot of each field
-  output$fieldwisePlot = renderPlot({
-    if( !(is.null(input$InCell)) && !(is.null(InCell()$field)) ){
-      #browser()
-      d = eval(parse(text=paste("InCell()$field$`", input$featureCol,"`", sep="")))
+  # Mini Stripchart
+  output$miniFieldData = renderHighcharts({
+    if( !is.null(InCell()$field) ){
+      if(input$featureCol != "Cell Count"){
+        d = eval(parse(text=paste("InCell()$cell$`", input$featureCol,"`", sep="")))
+        fieldNames = unique( InCell()$field$Field[grep(input$fieldWell, InCell()$field$Well )] )
 
-      l = mapply(function(well){
-        index = grep(well, InCell()$field$Well)
-        return(d[index])
-      }, as.character(InCell()$well$Well), SIMPLIFY=F, USE.NAMES=F)
-      names(l) = as.character(InCell()$well$Well)
+        l = mapply(function(field, n){
+          wellIdx = grep(input$fieldWell, InCell()$cell$Well)
+          fldIdx = grep(field, InCell()$cell$Field)
+          index = fldIdx[which(fldIdx %in% wellIdx)]
 
-      chosen = grep(paste0(input$fieldWell, "$"), names(l))
+          values = eval(parse(text=paste("InCell()$cell$`", input$featureCol,"`[index]", sep="")))
 
-      if(max(d) > 1) par(mar=c(6,2,6,0), bg=rgb(0,0,0,0))
-      if(max(d) > 100) par(mar=c(6,3,6,0), bg=rgb(0,0,0,0))
-      if(max(d) > 1000) par(mar=c(6,4,6,0), bg=rgb(0,0,0,0))
-      stripchart(l, vertical = T, col="#58849e",
-                 pch=16, las=1, axes=F,
-                 main=input$featureCol)
-      points(chosen, l[chosen], pch=16, cex=2, col="#bd0000")
-      axis(2, las=1)
-      axis(1, at=c(seq(1, 384, by=24), 384), labels=names(l)[c(seq(1, 384, by=24), 384)])
-      box()
-    }else{
-      noDataPlot()
+          mapply(function(v, n){
+            c( jitter(n-1, factor=5), v )
+          }, values, n, SIMPLIFY=F, USE.NAMES=F)
+
+
+        }, fieldNames, 1:length(fieldNames), SIMPLIFY=F, USE.NAMES=F)
+
+
+        # Highcharts Options
+        myChart=list(
+          credits=list(
+            enabled=FALSE
+          ),
+          chart=list(
+            type='boxplot'
+          ),
+          title=list(
+            text=""
+          ),
+          subtitle=list(
+            text="Individual Cell Values",
+            align='left'
+          ),
+          xAxis=list(
+            categories=list(
+              paste0("Fld ", as.character(fieldNames))
+            ),
+            min=-0.2,
+            max=0.2+length(fieldNames)-1
+          ),
+          yAxis=list(
+            title=list(
+              text="Value"
+            )
+          ),
+          tooltip=list(
+            headerFormat="{series.name}<br/>",
+            pointFormat="<b>{point.y}</b><br/>"
+          ),
+          legend=list(
+            enabled=FALSE
+          ),
+
+          series=list(
+            list(
+              name=input$featureCol,
+              color=getHighchartsColors()[1],
+              type="scatter",
+              data=unlist(l, recursive=F),
+              marker=list(
+                fillColor = '#ffffff',
+                lineWidth = 1,
+                lineColor = getHighchartsColors()[1]
+              )
+            )
+          )
+        )
+
+        return(list(chart=myChart))
+      }
     }
   })
-  outputOptions(output, 'fieldwisePlot', suspendWhenHidden=FALSE)
 
 
 
-  # Plot of the feature of interest distribution
-  output$featureDistPlot = renderPlot({
-    if( !is.null(InCell()) && !is.null(REMP()) && !is.null(negCtrlDist())
-        && !is.null(input$conc) && input$featureCol != 'Cell Count' ){
+
+  ## Feature Tab ##
+  # Large Kernel Density Plot
+  output$distribution = renderHighcharts({
+    noPlot = is.null(negCtrlDist()) || (is.null(input$featureColDist) || !(input$featureColDist %in% names(InCell()$cellList)) ||
+             is.null(input$logFeatureValues))
+
+    if( !noPlot ){
+
 
       # Get the list of negative control wells
       negCtrlWells = REMP()$well[which(REMP()$SAMPLE == "DMSO")]
 
-      # Get the current Compount Conc
-      value = as.numeric(REMP()$CONC[which(REMP()$SAMPLE == input$cmpdSelect)][input$conc])
+      # Get the list of the wells that the selected compound is in
+      conc = as.numeric(REMP()$CONC[which(REMP()$SAMPLE == input$cmpdSelect)])
+      concOrder = sort.int(conc, index.return=T)
+      wells = as.character(REMP()$well[which(REMP()$SAMPLE == input$cmpdSelect)])[concOrder$ix]
 
-
-      x = InCell()$cellList[[input$featureCol]][[input$fieldWell]]
-      if( length(x) < 1 ){
-        noDataPlot()
+      # Get the negative control well values
+      if( input$logFeatureValues ){
+        y = log10(unlist(
+          mapply(function(negWell){
+            InCell()$cellList[[ input$featureColDist ]][[ negWell ]]
+          }, as.character(negCtrlWells), SIMPLIFY=T, USE.NAMES=F)))
       }else{
         y = unlist(
-          mapply(function(negWell, well){
-            if(negWell != well) InCell()$cellList[[input$featureCol]][[negWell]]
-          }, as.character(negCtrlWells), input$fieldWell, SIMPLIFY=T, USE.NAMES=F))
-
-        #Calculate the statistics
-        ks=suppressWarnings(f_ks(x,y))
-        cvmts=f_cvmts(x,y)
-
-        # Calculate breaks
-        breaks=hist(c(x,y), plot = FALSE, breaks = 100)$breaks
-
-        # Set up a multiplot layout
-        layout( matrix(c(1:2), nrow=2, ncol=1), heights=c(7,1) )
-        par(mar=c(0,4,4,2)+0.1)
-
-        # Draw Histogram of DMSO Wells
-        hist( y,
-              freq=F,
-              breaks=breaks,
-              lwd = 0.5,
-              ylab = "", xlab = "",
-              main=paste0(input$fieldWell, " [", round(value, digits=0), " nM]"),
-              cex.main=1.5,
-              axes = FALSE,
-              ylim = c(0, max(c(pretty(density(y)$y), pretty(density(x)$y)))),
-              col="#FFE8C7",
-              border="#FFD599"
-        )
-
-        hist( x,
-              freq=F,
-              breaks=breaks,
-              add=T,
-              col="#9CCCEB",
-              border="#6BB9E3")
-
-        lines(density(y), lwd = 2, col = "#EBAF59")
-        lines(density(x), lwd = 2, col = "#256E9E")
-
-        if( length(x) < 30 ){
-          box(which="plot", lty="solid", lwd=3, col="red")
-          legend("topright", legend=paste0("n=",length(x)),
-                 pch="", text.col="red", cex=2, bty="n")
-        }
-
-        # Plot the legend
-        par(mar=c(0,0,0,0))
-        frame()
-
-        legend("center", legend=c("DMSO", input$cmpdSelect),
-               col=c("#EBAF59", "#256E9E"), lwd=2,
-               cex=1.5, ncol=2, bty="n")
+          mapply(function(negWell){
+            InCell()$cellList[[ input$featureColDist ]][[ negWell ]]
+          }, as.character(negCtrlWells), SIMPLIFY=T, USE.NAMES=F))
       }
-    }else{
-      noDataPlot()
-    }
-  })
-  outputOptions(output, 'featureDistPlot', suspendWhenHidden=FALSE)
 
+      data=list()
+      data$neg = JSONify(data.frame(x=density(y, na.rm=T)$x, y=density(y, na.rm=T)$y))
 
-  output$featureDistGrid = renderPlot({
-    if( is.null(InCell()) && is.null(REMP()) && is.null(negCtrlDist())
-        && is.null(input$conc) && input$featureCol == 'Cell Count' ) noDataPlot()
-
-    # Get the list of negative control wells
-    negCtrlWells = REMP()$well[which(REMP()$SAMPLE == "DMSO")]
-
-    # Get the list of the wells that the selected compound is in
-    conc = as.numeric(REMP()$CONC[which(REMP()$SAMPLE == input$cmpdSelect)])
-    concOrder = sort.int(conc, index.return=T)
-    wells = as.character(REMP()$well[which(REMP()$SAMPLE == input$cmpdSelect)])[concOrder$ix]
-
-    # Get the negative control well values
-    y = unlist(
-      mapply(function(negWell){
-        InCell()$cellList[[input$featureCol]][[negWell]]
-      }, as.character(negCtrlWells), SIMPLIFY=T, USE.NAMES=F))
-
-    # Setup the layout
-    n = length(wells)
-    if(n<6){
-      # Calculate Matrix Dimensions
-      cols = 3
-      rows = 1
-    }else if(n>6 && n<12){
-      # Calculate Matrix Dimensions
-      cols = ceiling(n/2)
-      rows = ceiling(n/cols)
-    }else if(n>12){
-      # Calculate Matrix Dimensions
-      rows = ceiling(n/6)
-      cols = 6
-    }
-
-    # Construct Matrix
-    mat = matrix( c(1:(rows*cols)), nrow=rows, ncol=cols, byrow=T )
-    mat = rbind(mat, rep(max(mat)+1, cols))
-
-    # Setup the heights
-    heights = c(rep(3, rows), 1)
-
-    # Make the layout
-    layout(mat, heights=heights)
-
-    # Generate the plots
-    for( i in 1:length(wells) ){
-      # Get the values for the stat tests
-      x = InCell()$cellList[[ input$featureCol ]][[ wells[i] ]]
-
-      if( length(x) < 1 ){
-        frame()
-      }else{
-        #Calculate the statistics
-        ks=suppressWarnings(f_ks(x,y))
-        cvmts=f_cvmts(x,y)
-
-        # Calculate breaks
-        breaks=hist(c(x,y), plot = FALSE, breaks = 100)$breaks
-
-        # Set margins
-        if( wells[i] == input$fieldWell ) {
-          #browser()
-          par(mar=c(0,4,8,2)+0.1, bg=rgb(223, 238, 255, 100, maxColorValue = 255) )
+      # Generate the plots
+      n = length(wells)
+      for( i in 1:length(wells) ){
+        # Get the values for the stat tests
+        if( input$logFeatureValues ){
+          x = log10(InCell()$cellList[[ input$featureColDist ]][[ wells[i] ]])
         }else{
-          par(mar=c(0,4,8,2)+0.1)
+          x = InCell()$cellList[[ input$featureColDist ]][[ wells[i] ]]
         }
 
-        # Draw Histogram of DMSO Wells
-        hist( y,
-              freq=F,
-              breaks=breaks,
-              lwd = 0.5,
-              ylab = "", xlab = "",
-              main=paste0(wells[i], " [", round(concOrder$x[i], digits=0), " nM]"),
-              cex.main=2,
-              axes = FALSE,
-              ylim = c(0, max(c(pretty(density(y)$y), pretty(density(x)$y)))),
-              col="#FFE8C7",
-              border="#FFD599"
-        )
-
-        hist( x,
-              freq=F,
-              breaks=breaks,
-              add=T,
-              col="#9CCCEB",
-              border="#6BB9E3")
-
-        lines(density(y), lwd = 2, col = "#EBAF59")
-        lines(density(x), lwd = 2, col = "#256E9E")
-
-        if( length(x) < 30 ){
-          box(which="plot", lty="solid", lwd=2, col="red")
-          legend("topright", legend=paste0("n=",length(x)),
-                 pch="", text.col="red", cex=1.5, bty="n")
+        if( length(x) < 1 ){
+          data[[paste0("c",i)]] = NULL
+        }else{
+          data[[paste0("c",i)]] = JSONify(data.frame(x=density(x, na.rm=T)$x, y=density(x, na.rm=T)$y))
         }
       }
+
+      # Get the values for
+      if( input$logFeatureValues ){
+        x = log10(unlist(InCell()$cellList[[ input$featureColDist ]][ wells ]))
+        label = "Log10 Feature Value"
+      }else{
+        x = unlist(InCell()$cellList[[ input$featureColDist ]][ wells ])
+        label = "Feature Value"
+      }
+      data$all = JSONify(data.frame(x=density(x, na.rm=T)$x, y=density(x, na.rm=T)$y))
+
+      seriesData=mapply(function(n){
+        list(
+          name=paste0(prettyNum(concOrder$x[n], digits=3, width=4)," nM"),
+          type="line",
+          linewidth=1,
+          zIndex=1,
+          data=data[[paste0("c",n)]],
+          visible=is.even(n)
+        )
+      }, 1:length(wells), SIMPLIFY=F, USE.NAMES=F)
+
+      seriesData[[length(wells)+1]] = list(
+        name="DMSO",
+        type="area",
+        linewidth=1,
+        zIndex=0,
+        data=data$neg
+
+        )
+
+
+
+      ## Highcarts Options ##
+      myChart=list(
+        credits=list(
+          enabled=FALSE
+        ),
+        title=list(
+          text=input$cmpdSelect,
+          align='left'
+        ),
+        subtitle=list(
+          text="Kernel Density Distribution Estimate",
+          align='left'
+        ),
+        xAxis=list(
+          title=list(
+            text=label
+          )
+        ),
+        yAxis=list(
+          title=list(
+            text="Density"
+          )
+        ),
+        tooltip=list(
+          shared=TRUE,
+          crosshairs=TRUE
+        ),
+        legend=list(
+          enabled=TRUE
+        ),
+        series=seriesData
+      )
+
+      return(list(chart=myChart))
     }
-
-      if( length(wells) < (max(mat)-1) ){
-        for( i in (length(wells)+1):(max(mat)-1) ){
-          frame()
-        }
-    }
-
-    # Generate legend
-    par(mar=c(0,0,0,0))
-    frame()
-
-    legend("center", legend=c("DMSO", input$cmpdSelect),
-           col=c("#EBAF59", "#256E9E"), lwd=2,
-           cex=1.5, ncol=2, bty="n")
   })
+
+  # Mini Stat Z Plot
+  output$miniZStat = renderHighcharts({
+    if( !is.null(doseCurveStats()) && !is.null(input$featureColDist) &&
+          (input$featureColDist %in% names(InCell()$cellList)) ){
+
+      # get the z stat vectors
+      ks.z = round(as.numeric(unlist(doseCurveStats()['ks.z', ])), 3)
+      cvmts.z = round(as.numeric(unlist(doseCurveStats()['cvmts.z', ])), 3)
+      conc = round(as.numeric(log10(unlist(doseCurveStats()['conc', ]))), 2)
+      cells = round(as.numeric(unlist(doseCurveStats()['cellNum', ])), 3)
+
+
+
+
+      ## Highcarts Options ##
+      myChart=list(
+        credits=list(
+          enabled=FALSE
+        ),
+        title=list(
+          text="",
+          align='left'
+        ),
+        subtitle=list(
+          text="Z-Score Normalized Test Statistics",
+          align='left'
+        ),
+        xAxis=list(
+          title=list(
+            text="Log10 Concentration [nM]"
+          )
+        ),
+        yAxis=list(
+          title=list(
+            text="Z-Score"
+          ),
+          tickPositions=sort(c(min(c(ks.z, cvmts.z, cells)), max(c(ks.z, cvmts.z, cells)), 0))
+        ),
+        tooltip=list(
+          shared=TRUE,
+          crosshairs=TRUE
+        ),
+        legend=list(
+          enabled=TRUE
+        ),
+        series=list(
+          list(
+            name="K-S Test",
+            type="line",
+            linewidth=1,
+            zIndex=1,
+            data=JSONify(data.frame(x=conc, y=ks.z))
+          ),
+          list(
+            name="CVMTS Test",
+            type="line",
+            linewidth=1,
+            zIndex=1,
+            data=JSONify(data.frame(x=conc, y=cvmts.z))
+          ),
+          list(
+            name="Cell Number",
+            type="area",
+            linewidth=1,
+            zIndex=0,
+            data=JSONify(data.frame(x=conc, y=cells))
+          )
+        )
+      )
+
+      return(list(chart=myChart))
+    }
+
+  })
+
+
+  # Mini Area Under the Curve Plot
+  output$miniAUC = renderHighcharts({
+    if( !is.null(doseCurveStats()) && !is.null(input$featureColDist) &&
+          (input$featureColDist %in% names(InCell()$cellList)) ){
+
+      # get the z stat vectors
+      ks.z = round(as.numeric(unlist(doseCurveStats()['ks.z', ])), 3)
+      cvmts.z = round(as.numeric(unlist(doseCurveStats()['cvmts.z', ])), 3)
+      conc = round(as.numeric(log10(unlist(doseCurveStats()['conc', ]))), 2)
+      cells = round(as.numeric(unlist(doseCurveStats()['cellNum', ])), 3)
+
+      # Get indexes of the ordered conc
+      id = order(conc)
+
+      # Calculate the Area Under the Curves
+      ks.AUC = sum(diff(conc[id])*rollmean(ks.z[id],2))
+      cvmts.AUC = sum(diff(conc[id])*rollmean(cvmts.z[id],2))
+
+      ## Highcarts Options ##
+      myChart=list(
+        credits=list(
+          enabled=FALSE
+        ),
+        title=list(
+          text="",
+          align='left'
+        ),
+        subtitle=list(
+          text="Area Under The Curve",
+          align='left'
+        ),
+        xAxis=list(
+          title=list(
+            text=""
+          ),
+          categories=c("K-S Test", "CVMTS Test")
+        ),
+        yAxis=list(
+          title=list(
+            text="AUC"
+          )
+        ),
+        tooltip=list(
+          shared=TRUE,
+          crosshairs=TRUE
+        ),
+        legend=list(
+          enabled=FALSE
+        ),
+        series=list(
+          list(
+            name="AUC",
+            type="column",
+            data=round(c(ks.AUC, cvmts.AUC), 3)
+          )
+        )
+      )
+
+      return(list(chart=myChart))
+    }
+
+  })
+
+
+
+
 
 
 
@@ -758,5 +1013,21 @@ shinyServer(function(input, output, session) {
     }) # Next
 
   }  # Previous/Next compound navigation
+
+  # Update File dropdowns
+  observe({
+    input$updateDropbox
+
+    updateSelectizeInput(session, 'InCellDB', choices = c("InCell File", names(Dropbox()$csv)))
+    updateSelectizeInput(session, 'annotationDB', choices = c("REMP File", names(Dropbox()$txt)))
+  })
+
+  # Sync the Feature dropdowns
+  observe({
+    updateSelectizeInput(session, 'featureColDist', selected=input$featureCol)
+  })
+  observe({
+    updateSelectizeInput(session, 'featureCol', selected=input$featureColDist)
+  })
 
 })
