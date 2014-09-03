@@ -20,9 +20,14 @@ ReadInCell = function(file, tables=c("cell", "field", "well"), progressBar=FALSE
   if( any(c("cell", "field") %in% tables) ){
     well.field = grep("[[:upper:]] - [[:digit:]]+\\(fld [[:digit:]]+\\)", temp)
 
+    if( length(well.field) == 0 ) {
+      well.field = grep("[[:upper:]] - [[:digit:]]", temp)
+      fld.name = 1
+    }
+
     # Find headers
     cellHead = grep("Well,", temp)[which(grep("Well,", temp) < min(well.field))]
-    fieldHead = grep("Well,", temp)[which(grep("Well,", temp) %in% min(well.field):max(well.field))]
+    fieldHead = grep("Well,", temp)[which(grep("Well,", temp) %in% min(well.field):max(well.field))][1]
   }
 
   # Update Progress Bar
@@ -43,12 +48,20 @@ ReadInCell = function(file, tables=c("cell", "field", "well"), progressBar=FALSE
                           }, head1, head2, SIMPLIFY=F, USE.NAMES=F))
     names(cellData) = header
     cellData = cellData[, !is.na(names(cellData))]
-    # Parse Well names
-    wellID = gsub("([[:upper:]]) - ([[:digit:]]{2})([[:punct:]]fld [[:digit:]]+[[:punct:]])", paste0("\\1","\\2"), cellData$Well)
-    wellID = gsub("([[:upper:]]) - ([[:digit:]]{1})([[:punct:]]fld [[:digit:]]+[[:punct:]])", paste0("\\1","0\\2"), wellID)
 
-    # Parse Field IDs
-    fieldID = gsub("([[:upper:]] - [[:digit:]]+)[[:punct:]]fld ([[:digit:]]+)[[:punct:]]", paste0("\\2"), cellData$Well)
+    if( is.null(fld.name) ){
+      # Parse Well names
+      wellID = gsub("([[:upper:]]) - ([[:digit:]]{2})([[:punct:]]fld [[:digit:]]+[[:punct:]])", paste0("\\1","\\2"), cellData$Well)
+      wellID = gsub("([[:upper:]]) - ([[:digit:]]{1})([[:punct:]]fld [[:digit:]]+[[:punct:]])", paste0("\\1","0\\2"), wellID)
+      # Parse Field IDs
+      fieldID = gsub("([[:upper:]] - [[:digit:]]+)[[:punct:]]fld ([[:digit:]]+)[[:punct:]]", paste0("\\2"), cellData$Well)
+    }else{
+      # Parse Well names
+      wellID = gsub("([[:upper:]]) - ([[:digit:]]{2})", paste0("\\1","\\2"), cellData$Well)
+      wellID = gsub("([[:upper:]]) - ([[:digit:]]{1})", paste0("\\1","0\\2"), wellID)
+
+      fieldID = fld.name
+    }
 
     # Append to table
     cellData = data.frame(Well=wellID, Field=fieldID, cellData[, which(names(cellData) != "Well")])
@@ -99,12 +112,21 @@ ReadInCell = function(file, tables=c("cell", "field", "well"), progressBar=FALSE
                           }, head1, head2, SIMPLIFY=F, USE.NAMES=F))
     names(fieldData) = header
     fieldData = fieldData[, !is.na(names(fieldData))]
-    # Parse Well names
-    wellID = gsub("([[:upper:]]) - ([[:digit:]]{2})([[:punct:]]fld [[:digit:]]+[[:punct:]])", paste0("\\1","\\2"), fieldData$Well)
-    wellID = gsub("([[:upper:]]) - ([[:digit:]]{1})([[:punct:]]fld [[:digit:]]+[[:punct:]])", paste0("\\1","0\\2"), wellID)
 
-    # Parse Field IDs
-    fieldID = gsub("([[:upper:]] - [[:digit:]]+)[[:punct:]]fld ([[:digit:]]+)[[:punct:]]", paste0("\\2"), fieldData$Well)
+    if( is.null(fld.name) ){
+      # Parse Well names
+      wellID = gsub("([[:upper:]]) - ([[:digit:]]{2})([[:punct:]]fld [[:digit:]]+[[:punct:]])", paste0("\\1","\\2"), fieldData$Well)
+      wellID = gsub("([[:upper:]]) - ([[:digit:]]{1})([[:punct:]]fld [[:digit:]]+[[:punct:]])", paste0("\\1","0\\2"), wellID)
+      # Parse Field IDs
+      fieldID = gsub("([[:upper:]] - [[:digit:]]+)[[:punct:]]fld ([[:digit:]]+)[[:punct:]]", paste0("\\2"), fieldData$Well)
+    }else{
+      # Parse Well names
+      wellID = gsub("([[:upper:]]) - ([[:digit:]]{2})", paste0("\\1","\\2"), fieldData$Well)
+      wellID = gsub("([[:upper:]]) - ([[:digit:]]{1})", paste0("\\1","0\\2"), wellID)
+
+      fieldID = fld.name
+    }
+
 
     # Append to table
     fieldData = data.frame(Well=wellID, Field=fieldID, fieldData[, which(names(fieldData) != "Well")])

@@ -8,11 +8,9 @@
 require(shiny)             # Shiny Framework
 require(shinyIncubator)    # Progress indicator
 require(shinythings)       # Password Input/Better Action buttons
-require(zoo)               # AUC Analysis
+require(MESS)               # AUC Analysis
 require(ShinyHighCharts)   # Javascript charting
-source("Parse_InCell.R")
-source("Parse_REMP_PlateLookup.R")
-source("Analysis_Helpers.R")
+
 
 noDataPlot = function(){
   par(mar=c(0,0,0,0))
@@ -62,6 +60,24 @@ getDropboxFiles = function(){
   list(csv=csvFiles, txt=txtFiles)
 }
 
+makeColorCode = function(min, max, data){
+  # Test for min, max types
+  if( typeof(min) != "character" ) stop("'min' must be supplied as a character vector")
+  if( typeof(max) != "character" ) stop("'max' must be supplied as a character vector")
+
+  if( nchar(min) %in% c(7,9) && strsplit(min, "")[[1]][1] == "#" &&
+      nchar(max) %in% c(7,9) && strsplit(max, "")[[1]][1] == "#" ){
+    # Scale data range onto 0-1 scale
+    range01 <- function(x)(x-min(x))/diff(range(x))
+    # generate colors
+    cols <- colorRamp(c(min, max))(range01(data))
+    # convert colors back to hex
+    apply(cols, 1, function(xt)rgb(xt[1], xt[2], xt[3], maxColorValue=255))
+  }else{
+    stop("'min' and 'max' must be supplied as hex color codes with preceeding '#'")
+  }
+}
+
 shinyServer(function(input, output, session) {
 
 
@@ -89,13 +105,22 @@ shinyServer(function(input, output, session) {
         updateSelectizeInput(session, 'featureCol',
                              choices = names(data$well)[which(names(data$well) != "Well")],
                              selected="Cell Count")
+        updateSelectizeInput(session, 'featureColDist',
+                             choices = names(data$well)[which(names(data$well) != "Well")],
+                             selected="Cell Count")
+        updateSelectizeInput(session, 'yFeat',
+                             choices = names(data$well)[which(names(data$well) != "Well")],
+                             selected="Cell Count")
+        updateSelectizeInput(session, 'xFeat',
+                             choices = names(data$well)[which(names(data$well) != "Well")],
+                             selected="Cell Count")
         updateSelectizeInput(session, 'fieldWell',
                              choices = as.character(data$well$Well),
                              selected=as.character(data$well$Well[1]))
         # Return
         return(data)
       })
-    }else if( !is.null(input$InCellDB) && input$InCellDB != "InCell File" ){
+    }else if( !is.null(input$InCellDB) && input$InCellDB != "Choose from Dropbox" ){
       withProgress(session, min=0, max=1, {
         setProgress(message='Parsing InCell File')
         data = ReadInCell(Dropbox()$csv[[input$InCellDB]]$path, progressBar=TRUE )
@@ -105,6 +130,12 @@ shinyServer(function(input, output, session) {
                              choices = names(data$well)[which(names(data$well) != "Well")],
                              selected="Cell Count")
         updateSelectizeInput(session, 'featureColDist',
+                             choices = names(data$well)[which(names(data$well) != "Well")],
+                             selected="Cell Count")
+        updateSelectizeInput(session, 'yFeat',
+                             choices = names(data$well)[which(names(data$well) != "Well")],
+                             selected="Cell Count")
+        updateSelectizeInput(session, 'xFeat',
                              choices = names(data$well)[which(names(data$well) != "Well")],
                              selected="Cell Count")
         updateSelectizeInput(session, 'fieldWell',
@@ -145,8 +176,9 @@ shinyServer(function(input, output, session) {
                            choices = unique(as.character(t$SAMPLE[which(t$SAMPLE != "DMSO")])),
                            selected = unique(as.character(t$SAMPLE[which(t$SAMPLE != "DMSO")]))[1] )
 
+
       return(t)
-    }else if( !is.null(input$annotationDB) && input$annotationDB != "REMP File" ){
+    }else if( !is.null(input$annotationDB) && input$annotationDB != "Choose from Dropbox" ){
       # Get the datapath
       path = Dropbox()$txt[[input$annotationDB]]$path
 
@@ -170,6 +202,7 @@ shinyServer(function(input, output, session) {
       updateSelectizeInput(session, 'cmpdSelect',
                            choices = unique(as.character(t$SAMPLE[which(t$SAMPLE != "DMSO")])),
                            selected = unique(as.character(t$SAMPLE[which(t$SAMPLE != "DMSO")]))[1] )
+
       return(t)
     }else{
       NULL
@@ -289,13 +322,17 @@ shinyServer(function(input, output, session) {
 
   # Statistics secton of Data tab
   output$dataset = renderText({
-    if( !is.null(input$InCell) ) name = input$InCell[1,'name']
-    if( input$InCellDB != "InCell File" ) name = input$InCellDB
+    if( !is.null(input$InCell) ) ICname = input$InCell[1,'name']
+    if( input$InCellDB != "InCell File" ) ICname = input$InCellDB
 
-    if( exists('name') && !is.null(name) ){
+    if( !is.null(input$annotation) ) REMPname = input$annotation[1,'name']
+    if( input$annotationDB != "InCell File" ) REMPname = input$annotationDB
+
+    if( exists('ICname') && exists('REMPname') && !is.null(ICname) && !is.null(REMPname) ){
       paste0(
-        "Data File:\n",
-        " ",name, "\n\n",
+        "Data Files:\n",
+        " ",ICname, "\n",
+        " ",REMPname, "\n\n",
         "Total Wells: ", dim(InCell()$well)[1], "\n",
         "Total Cells Counted: ", format(dim(InCell()$cell)[1], big.mark=","), "\n",
         "Total Fields: ", dim(InCell()$field)[1], "\n",
@@ -365,81 +402,57 @@ shinyServer(function(input, output, session) {
 
 
   ## Feature Tab ##
-  output$ksStatSummary = renderText({
+  output$statSummary = renderTable({
     if( !is.null(REMP()) && !is.null(input$cmpdSelect) &&
           !is.null(negCtrlDist()) && !is.null(input$featureColDist) &&
           input$featureColDist %in% names(InCell()$cellList) ){
-      paste0(
-        "K-S Test\n",
-        "Median: ", round(negCtrlDist()[[input$featureColDist]]$ks.median, digits=2), "\n",
-        "MAD: ", round(negCtrlDist()[[input$featureColDist]]$ks.mad, digits=2), "\n",
-        "Mean: ", round(negCtrlDist()[[input$featureColDist]]$ks.mean, digits=2), "\n",
-        "SD: ", round(negCtrlDist()[[input$featureColDist]]$ks.sd, digits=2)
-        )
+
+      table = data.frame(KS=c(
+                              round(negCtrlDist()[[input$featureColDist]]$ks.median, digits=2),
+                              round(negCtrlDist()[[input$featureColDist]]$ks.mad, digits=2),
+                              round(negCtrlDist()[[input$featureColDist]]$ks.mean, digits=2),
+                              round(negCtrlDist()[[input$featureColDist]]$ks.sd, digits=2)
+                              ),
+                         CVMTS=c(
+                              round(negCtrlDist()[[input$featureColDist]]$cvmts.median, digits=2),
+                              round(negCtrlDist()[[input$featureColDist]]$cvmts.mad, digits=2),
+                              round(negCtrlDist()[[input$featureColDist]]$cvmts.mean, digits=2),
+                              round(negCtrlDist()[[input$featureColDist]]$cvmts.sd, digits=2)
+                           ))
+      row.names(table) = c("Median", "MAD", "Mean", "SD")
+
     }else{
-      paste0(  "    Statistics\n\n   not available\n"  )
+      table = data.frame(KS=rep(NA, 4), CVMTS=rep(NA, 4))
+      row.names(table) = c("Median", "MAD", "Mean", "SD")
     }
-  })
 
-  output$cvmtsStatSummary = renderText({
-    if( !is.null(REMP()) && !is.null(input$cmpdSelect) &&
-          !is.null(negCtrlDist()) && !is.null(input$featureColDist) &&
-          input$featureColDist %in% names(InCell()$cellList) ){
-      paste0(
-        "CVMTS Test\n",
-        "Median: ", round(negCtrlDist()[[input$featureColDist]]$cvmts.median, digits=2), "\n",
-        "MAD: ", round(negCtrlDist()[[input$featureColDist]]$cvmts.mad, digits=2), "\n",
-        "Mean: ", round(negCtrlDist()[[input$featureColDist]]$cvmts.mean, digits=2), "\n",
-        "SD: ", round(negCtrlDist()[[input$featureColDist]]$cvmts.sd, digits=2)
-      )
-    }else{
-      paste0(  "    Statistics\n\n   not available\n"  )
-    }
-  })
-
-  output$cmpdStatSummary = renderText({
-    if( !is.null(InCell()) && !is.null(REMP()) && !is.null(negCtrlDist())
-        && input$featureColDist %in% names(InCell()$cellList) ){
-
-      # Get the list of negative control wells
-      negCtrlWells = REMP()$well[which(REMP()$SAMPLE == "DMSO")]
-
-
-      x = InCell()$cellList[[input$featureColDist]][[input$fieldWell]]
-      if( length(x) < 1 ){
-        # Print stats
-        paste0(
-          "K-S: NA\n",
-          "z: NA\n\n",
-          "CVMTS: NA\n",
-          "z: NA\n\n",
-          "n: NA"
-        )
-      }else{
-        y = unlist(
-          mapply(function(negWell, well){
-            if(negWell != well) InCell()$cellList[[input$featureColDist]][[negWell]]
-          }, as.character(negCtrlWells), input$fieldWell, SIMPLIFY=T, USE.NAMES=F))
-
-        #Calculate the statistics
-        ks=suppressWarnings(f_ks(x,y))
-        cvmts=f_cvmts(x,y)
-
-        # Print stats
-        paste0(
-          "K-S: ", round(ks, 2), "\n",
-          "z: ", round((ks - negCtrlDist()[[input$featureColDist]]$ks.median)/negCtrlDist()[[input$featureColDist]]$ks.mad, 2), "\n\n",
-          "CVMTS: ", round(cvmts, 2), "\n",
-          "z: ", round((cvmts - negCtrlDist()[[input$featureColDist]]$cvmts.median)/negCtrlDist()[[input$featureColDist]]$cvmts.mad, 2), "\n\n",
-          "n: ", length(x)
-          )
-      }
-    }else{
-      paste0(  "    Statistics\n   not available\n"  )
-    }
+    return(table)
   })
 
 
+
+  ## Any|Any Tab ##
+  output$ySlider = renderUI({
+    if( !is.null(InCell()) && !is.null(REMP()) && input$yThresh != "None" && input$yFeat != "Cell Count" ){
+
+      # Calculate the range of data for this feature
+      rng = range(unlist(InCell()$cellList[[input$yFeat]]), na.rm=T)
+
+      # Generate slider
+      sliderInput('ySlide', label="Threshold", min=floor(rng[1]), max=ceiling(rng[2]), value=mean(rng), step=1)
+    }
+  })
+
+  output$xSlider = renderUI({
+    if( !is.null(InCell()) && !is.null(REMP()) && input$xThresh != "None" && input$xFeat != "Cell Count" ){
+
+      # Calculate the range of data for this feature
+      rng = range(unlist(InCell()$cellList[[input$xFeat]]), na.rm=T)
+
+      # Generate slider
+      sliderInput('xSlide', label="Threshold", min=floor(rng[1]), max=ceiling(rng[2]), value=mean(rng), step=1)
+    }
+  })
 
 
   ############### Main Panel ###############
@@ -601,21 +614,23 @@ shinyServer(function(input, output, session) {
 
   # Mini Stripchart
   output$miniFieldData = renderHighcharts({
-    if( !is.null(InCell()$field) ){
+    if( !is.null(input$highHeat) ){
+      if( nchar(input$highHeat$x) == 1 ) clickX = paste0("0", input$highHeat$x+1) else clickX = input$highHeat$x+1
+      well = paste0(LETTERS[input$highHeat$y+1], clickX)
       if(input$featureCol != "Cell Count"){
         d = eval(parse(text=paste("InCell()$cell$`", input$featureCol,"`", sep="")))
-        fieldNames = unique( InCell()$field$Field[grep(input$fieldWell, InCell()$field$Well )] )
+        fieldNames = unique( InCell()$field$Field[grep(well, InCell()$field$Well )] )
 
         l = mapply(function(field, n){
-          wellIdx = grep(input$fieldWell, InCell()$cell$Well)
+          wellIdx = grep(well, InCell()$cell$Well)
           fldIdx = grep(field, InCell()$cell$Field)
           index = fldIdx[which(fldIdx %in% wellIdx)]
 
           values = eval(parse(text=paste("InCell()$cell$`", input$featureCol,"`[index]", sep="")))
 
           mapply(function(v, n){
-            c( jitter(n-1, factor=5), v )
-          }, values, n, SIMPLIFY=F, USE.NAMES=F)
+            c( (jitter(0, factor=5)+n), v )
+          }, values, n-1, SIMPLIFY=F, USE.NAMES=F)
 
 
         }, fieldNames, 1:length(fieldNames), SIMPLIFY=F, USE.NAMES=F)
@@ -633,13 +648,11 @@ shinyServer(function(input, output, session) {
             text=""
           ),
           subtitle=list(
-            text="Individual Cell Values",
+            text=paste0("Individual Cell Values (", well, ")"),
             align='left'
           ),
           xAxis=list(
-            categories=list(
-              paste0("Fld ", as.character(fieldNames))
-            ),
+            categories=as.list(paste0("Fld ", as.character(fieldNames))),
             min=-0.2,
             max=0.2+length(fieldNames)-1
           ),
@@ -671,8 +684,152 @@ shinyServer(function(input, output, session) {
           )
         )
 
+
         return(list(chart=myChart))
       }
+    }
+  })
+
+
+
+
+  ## Any|Any Tab ##
+  # Large Plot
+  output$AnyAny = renderHighcharts({
+    noPlot = is.null(input$yFeat) || is.null(input$xFeat) || is.null(input$yTrans) || is.null(input$xTrans) ||
+             is.null(input$yThresh) || is.null(input$xThresh) || is.null(InCell()) || is.null(REMP()) ||
+             (input$xFeat == "Cell Count") || (input$yFeat == "Cell Count")
+
+    if( !noPlot ){
+      compounds = unique(REMP()$SAMPLE[which(REMP()$SAMPLE != "DMSO")])
+      seriesData = mapply(function(cmpd, n){
+        # Pull Values for the x and y data
+        xF = InCell()$cellList[[input$xFeat]]
+        yF = InCell()$cellList[[input$yFeat]]
+
+        # Get the list of the wells that the selected compound is in
+        conc = as.numeric(REMP()$CONC[which(REMP()$SAMPLE == cmpd)])
+        concOrder = sort.int(conc, index.return=T)
+        wells = as.character(REMP()$well[which(REMP()$SAMPLE == cmpd)])[concOrder$ix]
+
+        # Generate X Data
+        x = unlist(mapply(function(w){
+          # Get data
+          t = xF[[w]]
+          c = if(input$xThresh != "None") input$xSlide else 1
+
+          # Transform if needed
+          if( input$xTrans == "Log10" ){
+            t = log10(t)
+            c = log10(c)
+          }
+          if( input$xTrans == "Log2" ){
+            t = log2(t)
+            c = log2(c)
+          }
+
+          # Threshold
+          switch( input$xThresh,
+                  "% Above" = prettyNum(sum(t > c)/length(t)*100, digits=3, width=4),
+                  "% Below" = prettyNum(sum(t < c)/length(t)*100, digits=3, width=4),
+                  "None" = prettyNum(mean(t), digits=3, width=4) )
+
+        }, wells, SIMPLIFY=F, USE.NAMES=F))
+
+        # Generate Y Data
+        y = unlist(mapply(function(w){
+          # Get data
+          t = yF[[w]]
+          c = if(input$yThresh != "None") input$ySlide else 1
+
+          # Transform if needed
+          if( input$yTrans == "Log10" ){
+            t = log10(t)
+            c = log10(c)
+          }
+          if( input$yTrans == "Log2" ){
+            t = log2(t)
+            c = log2(c)
+          }
+
+          # Threshold
+          switch( input$yThresh,
+                  "% Above" = prettyNum(sum(t > c)/length(t)*100, digits=3, width=4),
+                  "% Below" = prettyNum(sum(t < c)/length(t)*100, digits=3, width=4),
+                  "None" = prettyNum(mean(t), digits=3, width=4) )
+
+        }, wells, SIMPLIFY=F, USE.NAMES=F))
+
+        list(
+          events=list(
+            mouseOver = dimOtherSeries,
+            mouseOut = resetAllSeries
+          ),
+          animation=FALSE,
+          name=cmpd,
+          type="scatter",
+          data=JSONify(data.frame(x=as.numeric(x), y=as.numeric(y),
+                                  name=paste0(prettyNum(concOrder$x, digits=3, width=4), "nM"),
+                                  radius=log10(concOrder$x)*3),
+                       element.names=c("x", "y", "name", "radius"))
+        )
+
+      }, compounds, length(compounds), SIMPLIFY=F, USE.NAMES=F)
+
+
+      ## Highcarts Options ##
+      myChart=list(
+        credits=list(
+          enabled=FALSE
+        ),
+        title=list(
+          text=paste0(input$yFeat, " Versus ", input$xFeat),
+          align='left'
+        ),
+        subtitle=list(
+          text=input$cmpdAnyAny,
+          align='left'
+        ),
+        xAxis=list(
+          title=list(
+            text= switch( input$xThresh,
+                         "% Above" = paste0("% Cells with ", input$xFeat, " > ", input$xSlide),
+                         "% Below" = paste0("% Cells with ", input$xFeat, " < ", input$xSlide),
+                         "None" = input$xFeat)
+          ),
+          labels=list(
+            format=if(input$xThresh == "None") '{value}' else '{value}%'
+          ),
+          min=if(input$xThresh == "None") NULL else 0,
+          max=if(input$xThresh == "None") NULL else 100
+        ),
+        yAxis=list(
+          title=list(
+            text=switch( input$yThresh,
+                         "% Above" = paste0("% Cells with ", input$yFeat, " > ", input$ySlide),
+                         "% Below" = paste0("% Cells with ", input$yFeat, " < ", input$ySlide),
+                         "None" = input$yFeat)
+          ),
+          labels=list(
+            format=if(input$yThresh == "None") '{value}' else '{value}%'
+          ),
+          min=if(input$yThresh == "None") NULL else 0,
+          max=if(input$yThresh == "None") NULL else 100
+        ),
+        legend=list(
+          enabled = TRUE
+        ),
+        tooltip=list(
+          enabled=FALSE,
+          formatter="return this.series.name + ' [' + this.point.name + ']<br/>X: <b>' + this.x + '</b>   Y: <b>' + this.y + '</b>'"
+        ),
+        series=seriesData
+      )
+
+      return(list(chart=myChart))
+
+
+
     }
   })
 
@@ -889,8 +1046,8 @@ shinyServer(function(input, output, session) {
       id = order(conc)
 
       # Calculate the Area Under the Curves
-      ks.AUC = sum(diff(conc[id])*rollmean(ks.z[id],2))
-      cvmts.AUC = sum(diff(conc[id])*rollmean(cvmts.z[id],2))
+      ks.AUC = auc(x=conc[id], y=ks.z[id])
+      cvmts.AUC = auc(x=conc[id], y=cvmts.z[id])
 
       ## Highcarts Options ##
       myChart=list(
@@ -1018,8 +1175,8 @@ shinyServer(function(input, output, session) {
   observe({
     input$updateDropbox
 
-    updateSelectizeInput(session, 'InCellDB', choices = c("InCell File", names(Dropbox()$csv)))
-    updateSelectizeInput(session, 'annotationDB', choices = c("REMP File", names(Dropbox()$txt)))
+    updateSelectizeInput(session, 'InCellDB', choices = c("Choose from Dropbox", names(Dropbox()$csv)))
+    updateSelectizeInput(session, 'annotationDB', choices = c("Choose from Dropbox", names(Dropbox()$txt)))
   })
 
   # Sync the Feature dropdowns
@@ -1029,5 +1186,7 @@ shinyServer(function(input, output, session) {
   observe({
     updateSelectizeInput(session, 'featureCol', selected=input$featureColDist)
   })
+
+
 
 })
