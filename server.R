@@ -81,9 +81,8 @@ makeColorCode = function(min, max, data){
 shinyServer(function(input, output, session) {
 
 
-
   ############### Reactives ###############
-
+  ############### Dropbox ###############
   # Get Dropbox File List
   Dropbox = reactive({
     input$updateDropbox
@@ -93,7 +92,7 @@ shinyServer(function(input, output, session) {
 
 
 
-
+  ############### InCell ###############
   # Store InCell Data as a list
   InCell = reactive({
     if( !is.null(input$InCell) ){
@@ -149,6 +148,8 @@ shinyServer(function(input, output, session) {
     }
   })
 
+
+  ############### REMP ###############
   # Store compound annotations as a table
   REMP = reactive({
     if( !is.null(input$annotation) ){
@@ -173,8 +174,11 @@ shinyServer(function(input, output, session) {
 
       # Update selectize input for compound names
       updateSelectizeInput(session, 'cmpdSelect',
-                           choices = unique(as.character(t$SAMPLE[which(t$SAMPLE != "DMSO")])),
-                           selected = unique(as.character(t$SAMPLE[which(t$SAMPLE != "DMSO")]))[1] )
+                           choices = unique(as.character(t$comboId[which(t$SAMPLE != "DMSO")])),
+                           selected = unique(as.character(t$comboId[which(t$SAMPLE != "DMSO")]))[1] )
+      updateSelectizeInput(session, 'setPos',
+                           choices = unique(as.character(t$comboId[which(t$SAMPLE != "DMSO")])),
+                           selected = unique(as.character(t$comboId[which(t$SAMPLE != "DMSO")]))[1] )
 
 
       return(t)
@@ -200,8 +204,11 @@ shinyServer(function(input, output, session) {
 
       # Update selectize input for compound names
       updateSelectizeInput(session, 'cmpdSelect',
-                           choices = unique(as.character(t$SAMPLE[which(t$SAMPLE != "DMSO")])),
-                           selected = unique(as.character(t$SAMPLE[which(t$SAMPLE != "DMSO")]))[1] )
+                           choices = unique(as.character(t$comboId[which(t$SAMPLE != "DMSO")])),
+                           selected = unique(as.character(t$comboId[which(t$SAMPLE != "DMSO")]))[1] )
+      updateSelectizeInput(session, 'setPos',
+                           choices = unique(as.character(t$comboId[which(t$SAMPLE != "DMSO")])),
+                           selected = unique(as.character(t$comboId[which(t$SAMPLE != "DMSO")]))[1] )
 
       return(t)
     }else{
@@ -209,6 +216,8 @@ shinyServer(function(input, output, session) {
     }
   })
 
+
+  ############### negCtrlDist ###############
   # Neg Control Distributions
   negCtrlDist = reactive({
     if( is.null(InCell()) || is.null(REMP()) ) return()
@@ -257,15 +266,17 @@ shinyServer(function(input, output, session) {
     })
   })
 
+
+  ############### doseCurveStats ###############
   doseCurveStats = reactive({
     if( is.null(REMP()) || is.null(input$cmpdSelect) || is.null(InCell()) ||
           (is.null(input$featureColDist) && !(input$featureColDist %in% names(InCell()$cellList)))
           || is.null(negCtrlDist()) )  return()
 
     # Get the list of the wells that the selected compound is in
-    conc = as.numeric(REMP()$CONC[which(REMP()$SAMPLE == input$cmpdSelect)])
+    conc = as.numeric(REMP()$CONC[which(REMP()$comboId == input$cmpdSelect)])
     concOrder = sort.int(conc, index.return=T)
-    wells = as.character(REMP()$well[which(REMP()$SAMPLE == input$cmpdSelect)])[concOrder$ix]
+    wells = as.character(REMP()$well[which(REMP()$comboId == input$cmpdSelect)])[concOrder$ix]
 
     # Get the list of negative control wells
     negCtrlWells = REMP()$well[which(REMP()$SAMPLE == "DMSO")]
@@ -309,6 +320,9 @@ shinyServer(function(input, output, session) {
 
   ## Data Tab ##
 
+
+
+  ############### fileUploaded ###############
   # Tests for a file upload
   output$fileUploaded <- reactive({
     if( is.null(InCell()) || is.null(REMP()) ){
@@ -320,6 +334,10 @@ shinyServer(function(input, output, session) {
   })
   outputOptions(output, 'fileUploaded', suspendWhenHidden=FALSE)
 
+
+
+
+  ############### dataset ###############
   # Statistics secton of Data tab
   output$dataset = renderText({
     if( !is.null(input$InCell) ) ICname = input$InCell[1,'name']
@@ -341,6 +359,9 @@ shinyServer(function(input, output, session) {
     }
   })
 
+
+
+  ############### downWell ###############
   # Download Handler for Well Level Data
   output$downWell = downloadHandler(
     filename = function(){
@@ -353,6 +374,8 @@ shinyServer(function(input, output, session) {
     }
     )
 
+
+  ############### downField ###############
   # Download Handler for Field Level Data
   output$downField = downloadHandler(
     filename = function(){
@@ -365,6 +388,8 @@ shinyServer(function(input, output, session) {
     }
   )
 
+
+  ############### downCell ###############
   # Download Handler for Cell Level Data
   output$downCell = downloadHandler(
     filename = function(){
@@ -379,7 +404,7 @@ shinyServer(function(input, output, session) {
 
 
   ## QC Tab ##
-
+  ############### wellData ###############
   # Statistics section of Well tab
   output$wellData = renderText({
     # Generate parameter distribution statistics
@@ -402,6 +427,7 @@ shinyServer(function(input, output, session) {
 
 
   ## Feature Tab ##
+  ############### statSummary ###############
   output$statSummary = renderTable({
     if( !is.null(REMP()) && !is.null(input$cmpdSelect) &&
           !is.null(negCtrlDist()) && !is.null(input$featureColDist) &&
@@ -432,6 +458,7 @@ shinyServer(function(input, output, session) {
 
 
   ## Any|Any Tab ##
+  ############### ySlider ###############
   output$ySlider = renderUI({
     if( !is.null(InCell()) && !is.null(REMP()) && input$yThresh != "None" && input$yFeat != "Cell Count" ){
 
@@ -443,6 +470,7 @@ shinyServer(function(input, output, session) {
     }
   })
 
+  ############### xSlider ###############
   output$xSlider = renderUI({
     if( !is.null(InCell()) && !is.null(REMP()) && input$xThresh != "None" && input$xFeat != "Cell Count" ){
 
@@ -455,8 +483,16 @@ shinyServer(function(input, output, session) {
   })
 
 
+
+
+
+
+
   ############### Main Panel ###############
+
+
   ## QC Tab ##
+  ############### highHeat ###############
   # Large Heatmap
   output$highHeat = renderHighcharts({
     if( !is.null(InCell()$well) ){
@@ -547,6 +583,8 @@ shinyServer(function(input, output, session) {
     }
   } )
 
+
+  ############### miniHist ###############
   # Mini Histogram
   output$miniHist = renderHighcharts({
     if( !is.null(InCell()$well) ){
@@ -612,15 +650,23 @@ shinyServer(function(input, output, session) {
     }
   })
 
+
+  ############### miniFieldData ###############
   # Mini Stripchart
   output$miniFieldData = renderHighcharts({
-    if( !is.null(input$highHeat) ){
-      if( nchar(input$highHeat$x) == 1 ) clickX = paste0("0", input$highHeat$x+1) else clickX = input$highHeat$x+1
+    if( !is.null(input$highHeat) && !is.null(REMP()) ){
+      if( nchar(input$highHeat$x+1) == 1 ) clickX = paste0("0", input$highHeat$x+1) else clickX = input$highHeat$x+1
       well = paste0(LETTERS[input$highHeat$y+1], clickX)
+      color = as.integer(strsplit(gsub("\\)", "", gsub("rgb\\(", "", input$highHeat$color)), ",")[[1]])
+      color = rgb(color[1], color[2], color[3], maxColorValue=255)
+
+
       if(input$featureCol != "Cell Count"){
+        # Get the values for selected feature
         d = eval(parse(text=paste("InCell()$cell$`", input$featureCol,"`", sep="")))
         fieldNames = unique( InCell()$field$Field[grep(well, InCell()$field$Well )] )
 
+        # Pull out the values for the selected well
         l = mapply(function(field, n){
           wellIdx = grep(well, InCell()$cell$Well)
           fldIdx = grep(field, InCell()$cell$Field)
@@ -634,6 +680,18 @@ shinyServer(function(input, output, session) {
 
 
         }, fieldNames, 1:length(fieldNames), SIMPLIFY=F, USE.NAMES=F)
+
+
+        # Get the DMSO values
+        negCtrlWells = as.character(REMP()$well[which(REMP()$SAMPLE == "DMSO")])
+        negIdx = unlist(mapply(function(w){
+                    grep(w, InCell()$cell$Well)
+                  }, negCtrlWells, SIMPLIFY=T, USE.NAMES=F))
+        negValues = eval(parse(text=paste("InCell()$cell$`", input$featureCol,"`[negIdx]", sep="")))
+
+        dmso = mapply(function(v,n){
+          c( (jitter(0, factor=5)+n), v )
+        }, negValues, length(fieldNames), SIMPLIFY=F, USE.NAMES=F)
 
 
         # Highcharts Options
@@ -652,9 +710,9 @@ shinyServer(function(input, output, session) {
             align='left'
           ),
           xAxis=list(
-            categories=as.list(paste0("Fld ", as.character(fieldNames))),
+            categories=as.list(c(paste0("Fld ", as.character(fieldNames)), "DMSO")),
             min=-0.2,
-            max=0.2+length(fieldNames)-1
+            max=0.2+length(fieldNames)
           ),
           yAxis=list(
             title=list(
@@ -676,9 +734,20 @@ shinyServer(function(input, output, session) {
               type="scatter",
               data=unlist(l, recursive=F),
               marker=list(
-                fillColor = '#ffffff',
+                fillColor = color,
                 lineWidth = 1,
                 lineColor = getHighchartsColors()[1]
+              )
+            ),
+            list(
+              name="DMSO",
+              color=getHighchartsColors()[2],
+              type="scatter",
+              data=dmso,
+              marker=list(
+                fillColor = '#7F7F7F',
+                lineWidth = 1,
+                lineColor = getHighchartsColors()[2]
               )
             )
           )
@@ -694,6 +763,7 @@ shinyServer(function(input, output, session) {
 
 
   ## Any|Any Tab ##
+  ############### AnyAny ###############
   # Large Plot
   output$AnyAny = renderHighcharts({
     noPlot = is.null(input$yFeat) || is.null(input$xFeat) || is.null(input$yTrans) || is.null(input$xTrans) ||
@@ -701,16 +771,16 @@ shinyServer(function(input, output, session) {
              (input$xFeat == "Cell Count") || (input$yFeat == "Cell Count")
 
     if( !noPlot ){
-      compounds = unique(REMP()$SAMPLE[which(REMP()$SAMPLE != "DMSO")])
+      compounds = unique(REMP()$comboId[which(REMP()$SAMPLE != "DMSO")])
       seriesData = mapply(function(cmpd, n){
         # Pull Values for the x and y data
         xF = InCell()$cellList[[input$xFeat]]
         yF = InCell()$cellList[[input$yFeat]]
 
         # Get the list of the wells that the selected compound is in
-        conc = as.numeric(REMP()$CONC[which(REMP()$SAMPLE == cmpd)])
+        conc = as.numeric(REMP()$CONC[which(REMP()$comboId == cmpd)])
         concOrder = sort.int(conc, index.return=T)
-        wells = as.character(REMP()$well[which(REMP()$SAMPLE == cmpd)])[concOrder$ix]
+        wells = as.character(REMP()$well[which(REMP()$comboId == cmpd)])[concOrder$ix]
 
         # Generate X Data
         x = unlist(mapply(function(w){
@@ -760,16 +830,24 @@ shinyServer(function(input, output, session) {
 
         }, wells, SIMPLIFY=F, USE.NAMES=F))
 
+        # Generate the series name
+        comboName = strsplit(cmpd, " \\(")[[1]]
+        if( comboName[2] == ")" ){
+          showName = comboName[1]
+          }else{
+            showName = sub(")", "", comboName[2])
+          }
+
         list(
           events=list(
             mouseOver = dimOtherSeries,
             mouseOut = resetAllSeries
           ),
           animation=FALSE,
-          name=cmpd,
+          name=showName,
           type="scatter",
           data=JSONify(data.frame(x=as.numeric(x), y=as.numeric(y),
-                                  name=paste0(prettyNum(concOrder$x, digits=3, width=4), "nM"),
+                                  name=paste0(prettyNum(concOrder$x, digits=3, width=4), "uM"),
                                   radius=log10(concOrder$x)*3),
                        element.names=c("x", "y", "name", "radius"))
         )
@@ -789,6 +867,17 @@ shinyServer(function(input, output, session) {
         subtitle=list(
           text=input$cmpdAnyAny,
           align='left'
+        ),
+        plotOptions=list(
+          series=list(
+            marker=list(
+              states=list(
+                hover=list(
+                  enabled=FALSE
+                )
+              )
+            )
+          )
         ),
         xAxis=list(
           title=list(
@@ -834,9 +923,24 @@ shinyServer(function(input, output, session) {
   })
 
 
+  ############### yThresh ###############
+  # Y Axis Thresholding Plot #
+  output$yThresh = renderHighcharts({
+    noPlot = is.null(input$yFeat) || is.null(input$yTrans) || is.null(input$yThresh) ||
+             is.null(InCell()) || is.null(REMP()) ||(input$yFeat == "Cell Count")
+
+    if( !noPlot ){
+
+
+    }
+  })
+
+
+
 
 
   ## Feature Tab ##
+  ############### distribution ###############
   # Large Kernel Density Plot
   output$distribution = renderHighcharts({
     noPlot = is.null(negCtrlDist()) || (is.null(input$featureColDist) || !(input$featureColDist %in% names(InCell()$cellList)) ||
@@ -847,37 +951,61 @@ shinyServer(function(input, output, session) {
 
       # Get the list of negative control wells
       negCtrlWells = REMP()$well[which(REMP()$SAMPLE == "DMSO")]
+      posCmpd = which(REMP()$comboId == input$setPos)
+      posConc = which(REMP()$CONC == as.numeric(input$posConc))
+      posCtrlWells = REMP()$well[posCmpd[which(posCmpd %in% posConc)]]
 
       # Get the list of the wells that the selected compound is in
-      conc = as.numeric(REMP()$CONC[which(REMP()$SAMPLE == input$cmpdSelect)])
+      conc = as.numeric(REMP()$CONC[which(REMP()$comboId == input$cmpdSelect)])
       concOrder = sort.int(conc, index.return=T)
-      wells = as.character(REMP()$well[which(REMP()$SAMPLE == input$cmpdSelect)])[concOrder$ix]
+      wells = as.character(REMP()$well[which(REMP()$comboId == input$cmpdSelect)])[concOrder$ix]
 
       # Get the negative control well values
-      if( input$logFeatureValues ){
-        y = log10(unlist(
-          mapply(function(negWell){
-            InCell()$cellList[[ input$featureColDist ]][[ negWell ]]
-          }, as.character(negCtrlWells), SIMPLIFY=T, USE.NAMES=F)))
-      }else{
-        y = unlist(
-          mapply(function(negWell){
-            InCell()$cellList[[ input$featureColDist ]][[ negWell ]]
-          }, as.character(negCtrlWells), SIMPLIFY=T, USE.NAMES=F))
-      }
-
+      y = switch( input$logFeatureValues,
+        'Log10' = log10(unlist(
+                    mapply(function(negWell){
+                      InCell()$cellList[[ input$featureColDist ]][[ negWell ]]
+                    }, as.character(negCtrlWells), SIMPLIFY=T, USE.NAMES=F))),
+        'Log2' = log2(unlist(
+                    mapply(function(negWell){
+                      InCell()$cellList[[ input$featureColDist ]][[ negWell ]]
+                    }, as.character(negCtrlWells), SIMPLIFY=T, USE.NAMES=F))),
+        'None' = unlist(
+                    mapply(function(negWell){
+                      InCell()$cellList[[ input$featureColDist ]][[ negWell ]]
+                    }, as.character(negCtrlWells), SIMPLIFY=T, USE.NAMES=F))
+      )
       data=list()
       data$neg = JSONify(data.frame(x=density(y, na.rm=T)$x, y=density(y, na.rm=T)$y))
+
+
+
+      # Get the Positive Control Well Values
+      y = switch( input$logFeatureValues,
+                  'Log10' = log10(unlist(
+                    mapply(function(posWell){
+                      InCell()$cellList[[ input$featureColDist ]][[ posWell ]]
+                    }, as.character(posCtrlWells), SIMPLIFY=T, USE.NAMES=F))),
+                  'Log2' = log2(unlist(
+                    mapply(function(posWell){
+                      InCell()$cellList[[ input$featureColDist ]][[ posWell ]]
+                    }, as.character(posCtrlWells), SIMPLIFY=T, USE.NAMES=F))),
+                  'None' = unlist(
+                    mapply(function(posWell){
+                      InCell()$cellList[[ input$featureColDist ]][[ posWell ]]
+                    }, as.character(posCtrlWells), SIMPLIFY=T, USE.NAMES=F))
+      )
+      data$pos = JSONify(data.frame(x=density(y, na.rm=T)$x, y=density(y, na.rm=T)$y))
 
       # Generate the plots
       n = length(wells)
       for( i in 1:length(wells) ){
         # Get the values for the stat tests
-        if( input$logFeatureValues ){
-          x = log10(InCell()$cellList[[ input$featureColDist ]][[ wells[i] ]])
-        }else{
-          x = InCell()$cellList[[ input$featureColDist ]][[ wells[i] ]]
-        }
+        x = switch( input$logFeatureValues,
+                    'Log10' = log10(InCell()$cellList[[ input$featureColDist ]][[ wells[i] ]]),
+                    'Log2'  = log2(InCell()$cellList[[ input$featureColDist ]][[ wells[i] ]]),
+                    'None'  = InCell()$cellList[[ input$featureColDist ]][[ wells[i] ]]
+        )
 
         if( length(x) < 1 ){
           data[[paste0("c",i)]] = NULL
@@ -887,18 +1015,21 @@ shinyServer(function(input, output, session) {
       }
 
       # Get the values for
-      if( input$logFeatureValues ){
-        x = log10(unlist(InCell()$cellList[[ input$featureColDist ]][ wells ]))
-        label = "Log10 Feature Value"
-      }else{
-        x = unlist(InCell()$cellList[[ input$featureColDist ]][ wells ])
-        label = "Feature Value"
-      }
+      x = switch( input$logFeatureValues,
+                  'Log10' = log10(unlist(InCell()$cellList[[ input$featureColDist ]][ wells ])),
+                  'Log2'  = log2(unlist(InCell()$cellList[[ input$featureColDist ]][ wells ])),
+                  'None'  = unlist(InCell()$cellList[[ input$featureColDist ]][ wells ])
+      )
+      label = switch( input$logFeatureValues,
+                  'Log10' = "Log10 Feature Value",
+                  'Log2'  = "Log2 Feature Value",
+                  'None'  = "Feature Value"
+      )
       data$all = JSONify(data.frame(x=density(x, na.rm=T)$x, y=density(x, na.rm=T)$y))
 
       seriesData=mapply(function(n){
         list(
-          name=paste0(prettyNum(concOrder$x[n], digits=3, width=4)," nM"),
+          name=paste0(prettyNum(concOrder$x[n], digits=3, width=4)," uM"),
           type="line",
           linewidth=1,
           zIndex=1,
@@ -913,13 +1044,23 @@ shinyServer(function(input, output, session) {
         linewidth=1,
         zIndex=0,
         data=data$neg
-
         )
+
+      seriesData[[length(wells)+2]] = list(
+        name=paste0(gsub("\\)", "", strsplit(input$setPos, " \\(")[[1]][2]), " [", format(input$posConc, digits=2, width=4), "uM]"),
+        type="area",
+        linewidth=1,
+        zIndex=-1,
+        data=data$pos
+      )
 
 
 
       ## Highcarts Options ##
       myChart=list(
+        chart=list(
+          zoomType='x'
+        ),
         credits=list(
           enabled=FALSE
         ),
@@ -955,6 +1096,9 @@ shinyServer(function(input, output, session) {
     }
   })
 
+
+
+  ############### miniZStat ###############
   # Mini Stat Z Plot
   output$miniZStat = renderHighcharts({
     if( !is.null(doseCurveStats()) && !is.null(input$featureColDist) &&
@@ -984,7 +1128,7 @@ shinyServer(function(input, output, session) {
         ),
         xAxis=list(
           title=list(
-            text="Log10 Concentration [nM]"
+            text="Log10 Concentration [uM]"
           )
         ),
         yAxis=list(
@@ -1003,24 +1147,27 @@ shinyServer(function(input, output, session) {
         series=list(
           list(
             name="K-S Test",
-            type="line",
+            type="area",
             linewidth=1,
             zIndex=1,
-            data=JSONify(data.frame(x=conc, y=ks.z))
+            data=JSONify(data.frame(x=conc, y=ks.z)),
+            color=getHighchartsColors()[1]
           ),
           list(
             name="CVMTS Test",
-            type="line",
-            linewidth=1,
-            zIndex=1,
-            data=JSONify(data.frame(x=conc, y=cvmts.z))
-          ),
-          list(
-            name="Cell Number",
             type="area",
             linewidth=1,
             zIndex=0,
-            data=JSONify(data.frame(x=conc, y=cells))
+            data=JSONify(data.frame(x=conc, y=cvmts.z)),
+            color=getHighchartsColors()[2]
+          ),
+          list(
+            name="Cell Number",
+            type="line",
+            linewidth=1,
+            zIndex=2,
+            data=JSONify(data.frame(x=conc, y=cells)),
+            color=getHighchartsColors()[3]
           )
         )
       )
@@ -1031,6 +1178,8 @@ shinyServer(function(input, output, session) {
   })
 
 
+
+  ############### miniAUC ###############
   # Mini Area Under the Curve Plot
   output$miniAUC = renderHighcharts({
     if( !is.null(doseCurveStats()) && !is.null(input$featureColDist) &&
@@ -1084,7 +1233,16 @@ shinyServer(function(input, output, session) {
           list(
             name="AUC",
             type="column",
-            data=round(c(ks.AUC, cvmts.AUC), 3)
+            data=list(
+              list(
+                y=round(ks.AUC, 3),
+                color=getHighchartsColors()[1]
+              ),
+              list(
+                y=round(cvmts.AUC, 3),
+                color=getHighchartsColors()[2]
+              )
+            )
           )
         )
       )
@@ -1136,7 +1294,7 @@ shinyServer(function(input, output, session) {
            input$cmpdSelect != ""){
        # Get the well coordinates
        cmpd = input$cmpdSelect
-       well = as.character(REMP()$well[which(REMP()$SAMPLE == cmpd)[input$conc]])
+       well = as.character(REMP()$well[which(REMP()$comboId == cmpd)[input$conc]])
 
        updateSelectizeInput(session, 'fieldWell', selected=well)
      }
@@ -1146,7 +1304,7 @@ shinyServer(function(input, output, session) {
     observe({
       if( input$prv > 0 ){
         isolate({
-          cList = unique(as.character(REMP()$SAMPLE[which(REMP()$SAMPLE != "DMSO")]))
+          cList = unique(as.character(REMP()$comboId[which(REMP()$SAMPLE != "DMSO")]))
           n = which(cList == input$cmpdSelect[1])-1
           if( n <= 0 ) {n = 1}
           newName = cList[n]
@@ -1159,7 +1317,7 @@ shinyServer(function(input, output, session) {
     observe({
       if( input$nxt > 0 ){
         isolate({
-          cList = unique(as.character(REMP()$SAMPLE[which(REMP()$SAMPLE != "DMSO")]))
+          cList = unique(as.character(REMP()$comboId[which(REMP()$SAMPLE != "DMSO")]))
           n = which(cList == input$cmpdSelect[1])+1
           if( n > length(cList) ) {n = length(cList)}
           newName = cList[n]
@@ -1187,6 +1345,20 @@ shinyServer(function(input, output, session) {
     updateSelectizeInput(session, 'featureCol', selected=input$featureColDist)
   })
 
+  # Sync the Positive Control Concentration dropdown with the actual conentrations
+  observe({
+    cmpd = input$setPos
+
+    if( !is.null(cmpd) && cmpd != "Select a Compound" ) {
+      available = sort(unique(as.numeric(REMP()$CONC[which(REMP()$comboId == cmpd)])))
+      choices=list()
+      for( i in 1:length(available) ){
+        choices[[ paste0(format(available[i], digits=2, width=4), " uM") ]] = available[i]
+      }
+
+      updateSelectizeInput(session, 'posConc', choices=choices, selected=choices[length(choices)])
+    }
+  })
 
 
 })

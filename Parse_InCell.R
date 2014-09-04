@@ -23,11 +23,23 @@ ReadInCell = function(file, tables=c("cell", "field", "well"), progressBar=FALSE
     if( length(well.field) == 0 ) {
       well.field = grep("[[:upper:]] - [[:digit:]]", temp)
       fld.name = 1
+
+      # Remove well-level rows
+      hRows = grep("Well,", temp)[which(grep("Well,", temp) %in% min(well.field):max(well.field))]
+      if( length(hRows) > 1 ){
+        # Work up to find the last row the field table
+        n=4
+        while( temp[hRows[2]-n] == "" ){
+          n = n+1
+        }
+
+        well.field = well.field[1:which(well.field == hRows[2]-n)]
+      }
     }
 
     # Find headers
     cellHead = grep("Well,", temp)[which(grep("Well,", temp) < min(well.field))]
-    fieldHead = grep("Well,", temp)[which(grep("Well,", temp) %in% min(well.field):max(well.field))][1]
+    fieldHead = grep("Well,", temp)[which(grep("Well,", temp) %in% min(well.field):max(well.field))]
   }
 
   # Update Progress Bar

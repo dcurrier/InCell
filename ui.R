@@ -19,8 +19,9 @@ shinyUI(fluidPage(
 
   # Main Application
   fluidRow(
-    column(4,
-           tabsetPanel(id="tabs",
+    ##################### Inputs Pane #####################
+    div(tabsetPanel(id="tabs",
+             ##################### Data Tab #####################
              tabPanel("Data",
                       div(
                         conditionalPanel(
@@ -32,7 +33,6 @@ shinyUI(fluidPage(
                           fileInput('annotation', label=h4("REMP Plate Lookup File")),
                           selectizeInput('annotationDB', label="",
                                          choices=c("Choose from Dropbox", "No Files Found"), selected="Choose from Dropbox"),
-                          textInput('ctlCols', label=h4("Control Columns"), value="example: 21-24 or 21,22,23,24"),
                           hr(),
                           actionButton("updateDropBox", label="Check for new files")
                           ),
@@ -40,6 +40,10 @@ shinyUI(fluidPage(
                           condition="!output.fileUploaded",
                           h4('Current Dataset:'),
                           verbatimTextOutput('dataset'),
+                          hr(),
+                          textInput('ctlCols', label=h4("Control Columns"), value="example: 21-24 or 21,22,23,24"),
+                          selectizeInput('setPos', label=h4("Set Positive Control"), choices=c("Select a Compound")),
+                          selectizeInput('posConc', label="", choices="Choose a Concentration"),
                           hr(),
                           h4("Download Individual Tables"),
                           fluidRow(
@@ -61,6 +65,7 @@ shinyUI(fluidPage(
                         actionButton('console', label="Show Console"),
                         class="well tab-well"
                       )),
+             ##################### QC Tab #####################
              tabPanel("QC",
                       div(
                         selectizeInput('featureCol', label=h4("Select a Feature"),
@@ -69,6 +74,7 @@ shinyUI(fluidPage(
                         hr(),
                         verbatimTextOutput('wellData'),
                         class="well tab-well")),
+             ##################### Any|Any Tab #####################
              tabPanel("Any|Any",
                       div(
                         h4("Y Axis Feature"),
@@ -97,6 +103,7 @@ shinyUI(fluidPage(
                         hr(),
                         helpText("Add controls for showing/moving ablines"),
                         class="well tab-well")),
+             ##################### Feature Tab #####################
              tabPanel("Feature",
                       div(
                         selectizeInput('featureColDist', label=h4("Select a Feature"),
@@ -112,19 +119,32 @@ shinyUI(fluidPage(
                                                       icon='chevron-right', icon.library='font awesome'),
                                          class="pull-right"))
                         ),
-                        checkboxInput('logFeatureValues', label="Log Transform Feature Values", value=F),
+                        br(),
+                        radioButtons('logFeatureValues', label="Log Transform Feature Values",
+                                     choices=c("None", "Log10", "Log2"), selected="None"),
                         hr(),
                         h5("Negative Controls"),
                         tableOutput('statSummary'),
                         class="well tab-well")),
              position='left'
-           )),
+           ),
+        class="span4",
+        style="max-width: 400px;"),
+    ##################### Content Pane #####################
     column(8,
+           ##################### Data Pane #####################
            # Data Display Panel - Currently Blank
            conditionalPanel(
              condition="input.tabs == 'Data'",
-             div( class="padding-bottom: 30px")
+             div( conditionalPanel(
+                    condition="output.fileUploaded",
+                    img(src="Instructions/Slide1.png")),
+                  conditionalPanel(
+                    condition="!output.fileUploaded",
+                    img(src="Instructions/Slide2.png")),
+               class="padding-bottom: 30px")
            ),
+           ##################### QC Pane #####################
            # QC Display Panel - Heatmap, Mini Histogram, Mini Field Scatter Plot
            conditionalPanel(
              condition="input.tabs == 'QC'",
@@ -136,6 +156,7 @@ shinyUI(fluidPage(
                column(5, highchartsOutput('miniFieldData', height="250px", include=c("base", "more", "export", "no-data") ))
                )
              ),
+           ##################### Any|Any Pane #####################
            # Any over Any Display Panel - Plot any feature over any other
            conditionalPanel(
              condition="input.tabs == 'Any|Any'",
@@ -147,6 +168,7 @@ shinyUI(fluidPage(
                column(6, highchartsOutput('xThresh', height="250px", include=c("base", "more", "export", "no-data") ))
              )
            ),
+           ##################### Feature Pane #####################
            # Feature Display Panel - Kernel Density Plot, Z-Stat Plot, AUC Plot
            conditionalPanel(
              condition="input.tabs == 'Feature'",
@@ -160,6 +182,7 @@ shinyUI(fluidPage(
            )
     )
   ),
+  ##################### Header Tags #####################
   tags$head(
     tags$style("
                  .nav-tabs{

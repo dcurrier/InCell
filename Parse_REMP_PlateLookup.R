@@ -52,6 +52,23 @@ Parse_REMP = function(path, ctl){
   data$CU[mili] = "uM"
 
   # Bind the DMSO well rows to the main table
-  return(rbind(data, DMSOwells))
+  data = rbind(data, DMSOwells)
+
+  # Process the synonyms
+  synonyms = unlist(mapply(function(value){
+    if(is.na(value)) return(NA)
+
+    first = strsplit(as.character(value), " \\| ")[[1]][1]
+    if( nchar(first) > 20 ) first = strtrim(first, 20)
+
+    return(first)
+
+  }, data$synonym, SIMPLIFY=F, USE.NAMES=F))
+
+  # Bind the synonyms to the end of the table
+  data$altSynonym = synonyms
+  data$comboId = paste0(data$SAMPLE, " (", synonyms, ")")
+
+  return( data )
 }
 
