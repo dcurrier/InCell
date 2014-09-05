@@ -61,7 +61,7 @@ ReadInCell = function(file, tables=c("cell", "field", "well"), progressBar=FALSE
     names(cellData) = header
     cellData = cellData[, !is.na(names(cellData))]
 
-    if( is.null(fld.name) ){
+    if( !exists('fld.name') || is.null(fld.name) ){
       # Parse Well names
       wellID = gsub("([[:upper:]]) - ([[:digit:]]{2})([[:punct:]]fld [[:digit:]]+[[:punct:]])", paste0("\\1","\\2"), cellData$Well)
       wellID = gsub("([[:upper:]]) - ([[:digit:]]{1})([[:punct:]]fld [[:digit:]]+[[:punct:]])", paste0("\\1","0\\2"), wellID)
@@ -125,7 +125,7 @@ ReadInCell = function(file, tables=c("cell", "field", "well"), progressBar=FALSE
     names(fieldData) = header
     fieldData = fieldData[, !is.na(names(fieldData))]
 
-    if( is.null(fld.name) ){
+    if( !exists('fld.name') || is.null(fld.name) ){
       # Parse Well names
       wellID = gsub("([[:upper:]]) - ([[:digit:]]{2})([[:punct:]]fld [[:digit:]]+[[:punct:]])", paste0("\\1","\\2"), fieldData$Well)
       wellID = gsub("([[:upper:]]) - ([[:digit:]]{1})([[:punct:]]fld [[:digit:]]+[[:punct:]])", paste0("\\1","0\\2"), wellID)

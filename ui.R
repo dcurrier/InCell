@@ -25,7 +25,7 @@ shinyUI(fluidPage(
              tabPanel("Data",
                       div(
                         conditionalPanel(
-                          condition="output.fileUploaded",
+                          condition="output.fileUploaded || output.fileUploaded == null",
                           fileInput('InCell', label=h4("Import InCell Data File")),
                           selectizeInput('InCellDB', label="",
                                          choices=c("Choose from Dropbox", "No Files Found"), selected="Choose from Dropbox"),
@@ -37,7 +37,7 @@ shinyUI(fluidPage(
                           actionButton("updateDropBox", label="Check for new files")
                           ),
                         conditionalPanel(
-                          condition="!output.fileUploaded",
+                          condition="!output.fileUploaded && output.fileUploaded != null",
                           h4('Current Dataset:'),
                           verbatimTextOutput('dataset'),
                           hr(),
@@ -101,7 +101,27 @@ shinyUI(fluidPage(
                         ),
                         uiOutput('xSlider'),
                         hr(),
-                        helpText("Add controls for showing/moving ablines"),
+                        h4("Add Lines"),
+                        fluidRow(
+                          column(7, checkboxInput('hLineShow', label="Horizontal", value=F)),
+                          column(4, numericInput('hLine', label="", value=0))
+                        ),
+                        fluidRow(
+                          column(7, textInput('hLineName', label="", value="Label")),
+                          column(5, selectizeInput('hLineColor', label="",
+                                                   choices=c("Color", getHighchartsColors()),
+                                                   selected="Color"))
+                        ),
+                        fluidRow(
+                          column(7, checkboxInput('vLineShow', label="Vertical", value=F)),
+                          column(4, numericInput('vLine', label="", value=0))
+                          ),
+                          fluidRow(
+                            column(7, textInput('vLineName', label="", value="Label")),
+                            column(5, selectizeInput('vLineColor', label="",
+                                                     choices=c("Color", getHighchartsColors()),
+                                                     selected="Color"))
+                          ),
                         class="well tab-well")),
              ##################### Feature Tab #####################
              tabPanel("Feature",
@@ -137,10 +157,10 @@ shinyUI(fluidPage(
            conditionalPanel(
              condition="input.tabs == 'Data'",
              div( conditionalPanel(
-                    condition="output.fileUploaded",
+                    condition="output.fileUploaded || output.fileUploaded == null",
                     img(src="Instructions/Slide1.png")),
                   conditionalPanel(
-                    condition="!output.fileUploaded",
+                    condition="!output.fileUploaded && output.fileUploaded != null",
                     img(src="Instructions/Slide2.png")),
                class="padding-bottom: 30px")
            ),
@@ -160,12 +180,12 @@ shinyUI(fluidPage(
            # Any over Any Display Panel - Plot any feature over any other
            conditionalPanel(
              condition="input.tabs == 'Any|Any'",
-             div( highchartsOutput('AnyAny', height="570px", include=c("base", "more", "export", "no-data", "dim-on-hover") ),
+             div( highchartsOutput('AnyAny', height="470px", include=c("base", "more", "export", "no-data", "dim-on-hover") ),
                   class="padding-bottom: 30px"),
              br(),
              fluidRow(
-               column(6, highchartsOutput('yThresh', height="250px", include=c("base", "more", "export", "no-data") )),
-               column(6, highchartsOutput('xThresh', height="250px", include=c("base", "more", "export", "no-data") ))
+               column(6, highchartsOutput('yThreshPlot', height="250px", include=c("base", "more", "export", "no-data") )),
+               column(6, highchartsOutput('xThreshPlot', height="250px", include=c("base", "more", "export", "no-data") ))
              )
            ),
            ##################### Feature Pane #####################
@@ -176,8 +196,8 @@ shinyUI(fluidPage(
                   class="padding-bottom: 30px"),
              br(),
              fluidRow(
-               column(5, offset=1, highchartsOutput('miniZStat', height="250px", include=c("base", "more", "export", "no-data") )),
-               column(5, highchartsOutput('miniAUC', height="250px", include=c("base", "more", "export", "no-data") ))
+               column(6, offset=1, highchartsOutput('miniZStat', height="250px", include=c("base", "more", "export", "no-data") )),
+               column(4, highchartsOutput('miniAUC', height="250px", include=c("base", "more", "export", "no-data") ))
              )
            )
     )

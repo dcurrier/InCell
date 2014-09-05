@@ -463,10 +463,19 @@ shinyServer(function(input, output, session) {
     if( !is.null(InCell()) && !is.null(REMP()) && input$yThresh != "None" && input$yFeat != "Cell Count" ){
 
       # Calculate the range of data for this feature
-      rng = range(unlist(InCell()$cellList[[input$yFeat]]), na.rm=T)
+      if( input$yFeat %in% names(InCell()$cellList) ){
+        rng = range(unlist(InCell()$cellList[[input$yFeat]]), na.rm=T)
+      }else{
+        rng = range(InCell()$field[, input$yFeat], na.rm=T)
+      }
+
 
       # Generate slider
-      sliderInput('ySlide', label="Threshold", min=floor(rng[1]), max=ceiling(rng[2]), value=mean(rng), step=1)
+      fluidRow(
+        column(2, actionButton('ySlideMinus', label="", icon='minus', styleclass="link", style="margin-top: 34px;")),
+        column(8, sliderInput('ySlide', label="Threshold", min=floor(rng[1]), max=ceiling(rng[2]), value=mean(rng), step=1)),
+        column(2, actionButton('ySlidePlus', label="", icon='plus', styleclass="link", style="margin-top: 34px;"))
+      )
     }
   })
 
@@ -475,10 +484,18 @@ shinyServer(function(input, output, session) {
     if( !is.null(InCell()) && !is.null(REMP()) && input$xThresh != "None" && input$xFeat != "Cell Count" ){
 
       # Calculate the range of data for this feature
-      rng = range(unlist(InCell()$cellList[[input$xFeat]]), na.rm=T)
+      if( input$xFeat %in% names(InCell()$cellList) ){
+        rng = range(unlist(InCell()$cellList[[input$xFeat]]), na.rm=T)
+      }else{
+        rng = range(InCell()$field[, input$xFeat], na.rm=T)
+      }
 
       # Generate slider
-      sliderInput('xSlide', label="Threshold", min=floor(rng[1]), max=ceiling(rng[2]), value=mean(rng), step=1)
+      fluidRow(
+        column(2, actionButton('xSlideMinus', label="", icon='minus', styleclass="link", style="margin-top: 34px;")),
+        column(8, sliderInput('xSlide', label="Threshold", min=floor(rng[1]), max=ceiling(rng[2]), value=mean(rng), step=1)),
+        column(2, actionButton('xSlidePlus', label="", icon='plus', styleclass="link", style="margin-top: 34px;"))
+      )
     }
   })
 
@@ -660,7 +677,6 @@ shinyServer(function(input, output, session) {
       color = as.integer(strsplit(gsub("\\)", "", gsub("rgb\\(", "", input$highHeat$color)), ",")[[1]])
       color = rgb(color[1], color[2], color[3], maxColorValue=255)
 
-
       if(input$featureCol != "Cell Count"){
         # Get the values for selected feature
         d = eval(parse(text=paste("InCell()$cell$`", input$featureCol,"`", sep="")))
@@ -674,11 +690,26 @@ shinyServer(function(input, output, session) {
 
           values = eval(parse(text=paste("InCell()$cell$`", input$featureCol,"`[index]", sep="")))
 
-          mapply(function(v, n){
-            c( (jitter(0, factor=5)+n), v )
-          }, values, n-1, SIMPLIFY=F, USE.NAMES=F)
+          if( length(values) <= 60 ){
+            mapply(function(v, n){
+                      c( (jitter(0, factor=5)+n), v )
+                  }, values, n-1, SIMPLIFY=F, USE.NAMES=F)
+          }
 
+        }, fieldNames, 1:length(fieldNames), SIMPLIFY=F, USE.NAMES=F)
 
+        boxplots = mapply(function(field, n){
+          wellIdx = grep(well, InCell()$cell$Well)
+          fldIdx = grep(field, InCell()$cell$Field)
+          index = fldIdx[which(fldIdx %in% wellIdx)]
+
+          values = eval(parse(text=paste("InCell()$cell$`", input$featureCol,"`[index]", sep="")))
+
+          if( length(values) > 60 ){
+            as.numeric(summary(values)[-4])
+          }else{
+            rep(NA, 5)
+          }
         }, fieldNames, 1:length(fieldNames), SIMPLIFY=F, USE.NAMES=F)
 
 
@@ -689,9 +720,14 @@ shinyServer(function(input, output, session) {
                   }, negCtrlWells, SIMPLIFY=T, USE.NAMES=F))
         negValues = eval(parse(text=paste("InCell()$cell$`", input$featureCol,"`[negIdx]", sep="")))
 
-        dmso = mapply(function(v,n){
-          c( (jitter(0, factor=5)+n), v )
-        }, negValues, length(fieldNames), SIMPLIFY=F, USE.NAMES=F)
+        if( length(negValues) > 60 ){
+          boxplots[[length(fieldNames)+1]] = as.numeric(summary(negValues)[-4])
+        }else{
+          boxplots[[length(fieldNames)+1]] = rep(NA, 5)
+          dmso = mapply(function(v,n){
+            c( (jitter(0, factor=5)+n), v )
+          }, negValues, length(fieldNames), SIMPLIFY=F, USE.NAMES=F)
+      }
 
 
         # Highcharts Options
@@ -730,9 +766,15 @@ shinyServer(function(input, output, session) {
           series=list(
             list(
               name=input$featureCol,
+              data=boxplots,
+              zIndex=0
+            ),
+            list(
+              name=input$featureCol,
               color=getHighchartsColors()[1],
               type="scatter",
               data=unlist(l, recursive=F),
+              zIndex=1,
               marker=list(
                 fillColor = color,
                 lineWidth = 1,
@@ -743,9 +785,10 @@ shinyServer(function(input, output, session) {
               name="DMSO",
               color=getHighchartsColors()[2],
               type="scatter",
-              data=dmso,
+              data=if( exists('dmso') ) dmso else NULL,
+              zIndex=1,
               marker=list(
-                fillColor = '#7F7F7F',
+                 fillColor = '#7F7F7F',
                 lineWidth = 1,
                 lineColor = getHighchartsColors()[2]
               )
@@ -774,8 +817,17 @@ shinyServer(function(input, output, session) {
       compounds = unique(REMP()$comboId[which(REMP()$SAMPLE != "DMSO")])
       seriesData = mapply(function(cmpd, n){
         # Pull Values for the x and y data
-        xF = InCell()$cellList[[input$xFeat]]
-        yF = InCell()$cellList[[input$yFeat]]
+        if( input$xFeat %in% names(InCell()$cellList) ){
+          xF = InCell()$cellList[[input$xFeat]]
+        }else{
+          xF = InCell()$field[, input$xFeat]
+        }
+
+        if( input$yFeat %in% names(InCell()$cellList) ){
+          yF = InCell()$cellList[[input$yFeat]]
+        }else{
+          yF = InCell()$field[, input$yFeat]
+        }
 
         # Get the list of the wells that the selected compound is in
         conc = as.numeric(REMP()$CONC[which(REMP()$comboId == cmpd)])
@@ -785,7 +837,11 @@ shinyServer(function(input, output, session) {
         # Generate X Data
         x = unlist(mapply(function(w){
           # Get data
-          t = xF[[w]]
+          if( input$xFeat %in% names(InCell()$cellList) ){
+            t = unlist(xF[[w]])
+          }else{
+            t = xF[which(InCell()$field$Well == as.character(w))]
+          }
           c = if(input$xThresh != "None") input$xSlide else 1
 
           # Transform if needed
@@ -809,7 +865,11 @@ shinyServer(function(input, output, session) {
         # Generate Y Data
         y = unlist(mapply(function(w){
           # Get data
-          t = yF[[w]]
+          if( input$yFeat %in% names(InCell()$cellList) ){
+            t = unlist(yF[[w]])
+          }else{
+            t = yF[which(InCell()$field$Well == as.character(w))]
+          }
           c = if(input$yThresh != "None") input$ySlide else 1
 
           # Transform if needed
@@ -839,10 +899,6 @@ shinyServer(function(input, output, session) {
           }
 
         list(
-          events=list(
-            mouseOver = dimOtherSeries,
-            mouseOut = resetAllSeries
-          ),
           animation=FALSE,
           name=showName,
           type="scatter",
@@ -857,6 +913,9 @@ shinyServer(function(input, output, session) {
 
       ## Highcarts Options ##
       myChart=list(
+        chart=list(
+          marginRight=250
+        ),
         credits=list(
           enabled=FALSE
         ),
@@ -870,6 +929,10 @@ shinyServer(function(input, output, session) {
         ),
         plotOptions=list(
           series=list(
+            events=list(
+              mouseOver = dimOtherSeries,
+              mouseOut = resetAllSeries
+            ),
             marker=list(
               states=list(
                 hover=list(
@@ -906,7 +969,13 @@ shinyServer(function(input, output, session) {
           max=if(input$yThresh == "None") NULL else 100
         ),
         legend=list(
-          enabled = TRUE
+          enabled = TRUE,
+          layout='vertical',
+          align='right',
+          verticalAlign='top',
+          x=-10,
+          y=30,
+          floating=TRUE
         ),
         tooltip=list(
           enabled=FALSE,
@@ -923,178 +992,447 @@ shinyServer(function(input, output, session) {
   })
 
 
+
+
+
+
+
+
+
   ############### yThresh ###############
   # Y Axis Thresholding Plot #
-  output$yThresh = renderHighcharts({
+  output$yThreshPlot = renderHighcharts({
     noPlot = is.null(input$yFeat) || is.null(input$yTrans) || is.null(input$yThresh) ||
              is.null(InCell()) || is.null(REMP()) ||(input$yFeat == "Cell Count")
 
     if( !noPlot ){
-
-
-    }
-  })
-
-
-
-
-
-  ## Feature Tab ##
-  ############### distribution ###############
-  # Large Kernel Density Plot
-  output$distribution = renderHighcharts({
-    noPlot = is.null(negCtrlDist()) || (is.null(input$featureColDist) || !(input$featureColDist %in% names(InCell()$cellList)) ||
-             is.null(input$logFeatureValues))
-
-    if( !noPlot ){
-
-
       # Get the list of negative control wells
       negCtrlWells = REMP()$well[which(REMP()$SAMPLE == "DMSO")]
       posCmpd = which(REMP()$comboId == input$setPos)
       posConc = which(REMP()$CONC == as.numeric(input$posConc))
       posCtrlWells = REMP()$well[posCmpd[which(posCmpd %in% posConc)]]
 
-      # Get the list of the wells that the selected compound is in
-      conc = as.numeric(REMP()$CONC[which(REMP()$comboId == input$cmpdSelect)])
-      concOrder = sort.int(conc, index.return=T)
-      wells = as.character(REMP()$well[which(REMP()$comboId == input$cmpdSelect)])[concOrder$ix]
-
-      # Get the negative control well values
-      y = switch( input$logFeatureValues,
-        'Log10' = log10(unlist(
-                    mapply(function(negWell){
-                      InCell()$cellList[[ input$featureColDist ]][[ negWell ]]
-                    }, as.character(negCtrlWells), SIMPLIFY=T, USE.NAMES=F))),
-        'Log2' = log2(unlist(
-                    mapply(function(negWell){
-                      InCell()$cellList[[ input$featureColDist ]][[ negWell ]]
-                    }, as.character(negCtrlWells), SIMPLIFY=T, USE.NAMES=F))),
-        'None' = unlist(
-                    mapply(function(negWell){
-                      InCell()$cellList[[ input$featureColDist ]][[ negWell ]]
-                    }, as.character(negCtrlWells), SIMPLIFY=T, USE.NAMES=F))
-      )
-      data=list()
-      data$neg = JSONify(data.frame(x=density(y, na.rm=T)$x, y=density(y, na.rm=T)$y))
-
-
-
-      # Get the Positive Control Well Values
-      y = switch( input$logFeatureValues,
-                  'Log10' = log10(unlist(
-                    mapply(function(posWell){
-                      InCell()$cellList[[ input$featureColDist ]][[ posWell ]]
-                    }, as.character(posCtrlWells), SIMPLIFY=T, USE.NAMES=F))),
-                  'Log2' = log2(unlist(
-                    mapply(function(posWell){
-                      InCell()$cellList[[ input$featureColDist ]][[ posWell ]]
-                    }, as.character(posCtrlWells), SIMPLIFY=T, USE.NAMES=F))),
-                  'None' = unlist(
-                    mapply(function(posWell){
-                      InCell()$cellList[[ input$featureColDist ]][[ posWell ]]
-                    }, as.character(posCtrlWells), SIMPLIFY=T, USE.NAMES=F))
-      )
-      data$pos = JSONify(data.frame(x=density(y, na.rm=T)$x, y=density(y, na.rm=T)$y))
-
-      # Generate the plots
-      n = length(wells)
-      for( i in 1:length(wells) ){
-        # Get the values for the stat tests
-        x = switch( input$logFeatureValues,
-                    'Log10' = log10(InCell()$cellList[[ input$featureColDist ]][[ wells[i] ]]),
-                    'Log2'  = log2(InCell()$cellList[[ input$featureColDist ]][[ wells[i] ]]),
-                    'None'  = InCell()$cellList[[ input$featureColDist ]][[ wells[i] ]]
-        )
-
-        if( length(x) < 1 ){
-          data[[paste0("c",i)]] = NULL
+      # Generate Neg Y Data
+      NegY = unlist(mapply(function(w){
+        # Get data
+        if( input$yFeat %in% names(InCell()$cellList) ){
+          t = unlist(InCell()$cellList[[input$yFeat]][w])
         }else{
-          data[[paste0("c",i)]] = JSONify(data.frame(x=density(x, na.rm=T)$x, y=density(x, na.rm=T)$y))
+          t = InCell()$field[which(InCell()$field$Well == as.character(w)), input$yFeat]
         }
-      }
+        c = if(input$yThresh != "None") input$ySlide else 1
 
-      # Get the values for
-      x = switch( input$logFeatureValues,
-                  'Log10' = log10(unlist(InCell()$cellList[[ input$featureColDist ]][ wells ])),
-                  'Log2'  = log2(unlist(InCell()$cellList[[ input$featureColDist ]][ wells ])),
-                  'None'  = unlist(InCell()$cellList[[ input$featureColDist ]][ wells ])
-      )
-      label = switch( input$logFeatureValues,
-                  'Log10' = "Log10 Feature Value",
-                  'Log2'  = "Log2 Feature Value",
-                  'None'  = "Feature Value"
-      )
-      data$all = JSONify(data.frame(x=density(x, na.rm=T)$x, y=density(x, na.rm=T)$y))
+        # Transform if needed
+        if( input$yTrans == "Log10" ){
+          t = log10(t)
+          c = log10(c)
+        }
+        if( input$yTrans == "Log2" ){
+          t = log2(t)
+          c = log2(c)
+        }
 
-      seriesData=mapply(function(n){
-        list(
-          name=paste0(prettyNum(concOrder$x[n], digits=3, width=4)," uM"),
-          type="line",
-          linewidth=1,
-          zIndex=1,
-          data=data[[paste0("c",n)]],
-          visible=is.even(n)
-        )
-      }, 1:length(wells), SIMPLIFY=F, USE.NAMES=F)
+        # Threshold
+        switch( input$yThresh,
+                "% Above" = sum(t > c)/length(t)*100,
+                "% Below" = sum(t < c)/length(t)*100,
+                "None" = mean(t) )
 
-      seriesData[[length(wells)+1]] = list(
-        name="DMSO",
-        type="area",
-        linewidth=1,
-        zIndex=0,
-        data=data$neg
-        )
+      }, negCtrlWells, SIMPLIFY=F, USE.NAMES=F))
 
-      seriesData[[length(wells)+2]] = list(
-        name=paste0(gsub("\\)", "", strsplit(input$setPos, " \\(")[[1]][2]), " [", format(input$posConc, digits=2, width=4), "uM]"),
-        type="area",
-        linewidth=1,
-        zIndex=-1,
-        data=data$pos
-      )
+      # Generate Pos Y Data
+      PosY = unlist(mapply(function(w){
+        # Get data
+        if( input$yFeat %in% names(InCell()$cellList) ){
+          t = unlist(InCell()$cellList[[input$yFeat]][w])
+        }else{
+          t = InCell()$field[which(InCell()$field$Well == as.character(w)), input$yFeat]
+        }
+        c = if(input$yThresh != "None") input$ySlide else 1
+
+        # Transform if needed
+        if( input$yTrans == "Log10" ){
+          t = log10(t)
+          c = log10(c)
+        }
+        if( input$yTrans == "Log2" ){
+          t = log2(t)
+          c = log2(c)
+        }
+
+        # Threshold
+        switch( input$yThresh,
+                "% Above" = sum(t > c)/length(t)*100,
+                "% Below" = sum(t < c)/length(t)*100,
+                "None" = mean(t) )
+
+      }, posCtrlWells, SIMPLIFY=F, USE.NAMES=F))
+
+      # Add Jitter to the data
+      pos = mapply(function(v){
+        c( v, jitter(0, factor=5))
+      }, PosY, SIMPLIFY=F, USE.NAMES=F)
+
+      neg = mapply(function(v){
+        c( v, jitter(0, factor=5))
+      }, NegY, SIMPLIFY=F, USE.NAMES=F)
 
 
 
-      ## Highcarts Options ##
+      # Highcharts Options
       myChart=list(
-        chart=list(
-          zoomType='x'
-        ),
         credits=list(
           enabled=FALSE
         ),
+        chart=list(
+          type='scatter'
+        ),
         title=list(
-          text=input$cmpdSelect,
-          align='left'
+          text=""
         ),
         subtitle=list(
-          text="Kernel Density Distribution Estimate",
+          text="Y Axis Thresholding Tool",
           align='left'
         ),
         xAxis=list(
           title=list(
-            text=label
-          )
+            text=if(input$yThresh != "None") paste0(input$yThresh, " ", input$ySlide) else input$yFeat
+          ),
+          min=if(input$yThresh != "None") 0 else min(c(NegY, PosY)),
+          max=if(input$yThresh != "None") 100 else max(c(NegY, PosY))
         ),
         yAxis=list(
           title=list(
-            text="Density"
+            text=""
+          ),
+          min=-0.2,
+          max=0.2,
+          labels=list(
+            enabled=FALSE
           )
-        ),
-        tooltip=list(
-          shared=TRUE,
-          crosshairs=TRUE
         ),
         legend=list(
           enabled=TRUE
         ),
-        series=seriesData
+        series=list(
+          list(
+            name="DMSO",
+            color=getHighchartsColors()[1],
+            type="scatter",
+            data=neg
+          ),
+          list(
+            name=paste0(gsub("\\)", "", strsplit(input$setPos, " \\(")[[1]][2]), " [", format(input$posConc, digits=2, width=4), "uM]"),
+            color=getHighchartsColors()[2],
+            type="scatter",
+            data=pos
+          )
+        )
       )
 
       return(list(chart=myChart))
     }
   })
+
+
+
+
+
+    ############### xThresh ###############
+    # X Axis Thresholding Plot #
+    output$xThreshPlot = renderHighcharts({
+      noPlot = is.null(input$xFeat) || is.null(input$xTrans) || is.null(input$xThresh) ||
+        is.null(InCell()) || is.null(REMP()) ||(input$xFeat == "Cell Count")
+
+      if( !noPlot ){
+        # Get the list of negative control wells
+        negCtrlWells = REMP()$well[which(REMP()$SAMPLE == "DMSO")]
+        posCmpd = which(REMP()$comboId == input$setPos)
+        posConc = which(REMP()$CONC == as.numeric(input$posConc))
+        posCtrlWells = REMP()$well[posCmpd[which(posCmpd %in% posConc)]]
+
+        # Generate Neg Y Data
+        NegY = unlist(mapply(function(w){
+          # Get data
+          if( input$xFeat %in% names(InCell()$cellList) ){
+            t = unlist(InCell()$cellList[[input$xFeat]][w])
+          }else{
+            t = InCell()$field[which(InCell()$field$Well == as.character(w)), input$xFeat]
+          }
+          c = if(input$xThresh != "None") input$xSlide else 1
+
+          # Transform if needed
+          if( input$xTrans == "Log10" ){
+            t = log10(t)
+            c = log10(c)
+          }
+          if( input$xTrans == "Log2" ){
+            t = log2(t)
+            c = log2(c)
+          }
+
+          # Threshold
+          switch( input$xThresh,
+                  "% Above" = sum(t > c)/length(t)*100,
+                  "% Below" = sum(t < c)/length(t)*100,
+                  "None" = mean(t) )
+
+        }, negCtrlWells, SIMPLIFY=F, USE.NAMES=F))
+
+        # Generate Pos Y Data
+        PosY = unlist(mapply(function(w){
+          # Get data
+          if( input$xFeat %in% names(InCell()$cellList) ){
+            t = unlist(InCell()$cellList[[input$xFeat]][w])
+          }else{
+            t = InCell()$field[which(InCell()$field$Well == as.character(w)), input$xFeat]
+          }
+          c = if(input$xThresh != "None") input$xSlide else 1
+
+          # Transform if needed
+          if( input$xTrans == "Log10" ){
+            t = log10(t)
+            c = log10(c)
+          }
+          if( input$xTrans == "Log2" ){
+            t = log2(t)
+            c = log2(c)
+          }
+
+          # Threshold
+          switch( input$xThresh,
+                  "% Above" = sum(t > c)/length(t)*100,
+                  "% Below" = sum(t < c)/length(t)*100,
+                  "None" = mean(t) )
+
+        }, posCtrlWells, SIMPLIFY=F, USE.NAMES=F))
+
+        # Add Jitter to the data
+        pos = mapply(function(v){
+          c( v, jitter(0, factor=5))
+        }, PosY, SIMPLIFY=F, USE.NAMES=F)
+
+        neg = mapply(function(v){
+          c( v, jitter(0, factor=5))
+        }, NegY, SIMPLIFY=F, USE.NAMES=F)
+
+
+
+        # Highcharts Options
+        myChart=list(
+          credits=list(
+            enabled=FALSE
+          ),
+          chart=list(
+            type='scatter'
+          ),
+          title=list(
+            text=""
+          ),
+          subtitle=list(
+            text="X Axis Thresholding Tool",
+            align='left'
+          ),
+          xAxis=list(
+            title=list(
+              text=if(input$xThresh != "None") paste0(input$xThresh, " ", input$xSlide) else input$xFeat
+            ),
+            min=if(input$xThresh != "None") 0 else min(c(NegY, PosY)),
+            max=if(input$xThresh != "None") 100 else max(c(NegY, PosY))
+          ),
+          yAxis=list(
+            title=list(
+              text=""
+            ),
+            min=-0.2,
+            max=0.2,
+            labels=list(
+              enabled=FALSE
+            )
+          ),
+          legend=list(
+            enabled=TRUE
+          ),
+          series=list(
+            list(
+              name="DMSO",
+              color=getHighchartsColors()[1],
+              type="scatter",
+              data=neg
+            ),
+            list(
+              name=paste0(gsub("\\)", "", strsplit(input$setPos, " \\(")[[1]][2]), " [", format(input$posConc, digits=2, width=4), "uM]"),
+              color=getHighchartsColors()[2],
+              type="scatter",
+              data=pos
+            )
+          )
+        )
+
+        return(list(chart=myChart))
+      }
+    })
+
+
+
+
+
+    ## Feature Tab ##
+    ############### distribution ###############
+    # Large Kernel Density Plot
+    output$distribution = renderHighcharts({
+      noPlot = is.null(negCtrlDist()) || (is.null(input$featureColDist) || !(input$featureColDist %in% names(InCell()$cellList)) ||
+               is.null(input$logFeatureValues))
+
+      if( !noPlot ){
+
+
+        # Get the list of negative control wells
+        negCtrlWells = REMP()$well[which(REMP()$SAMPLE == "DMSO")]
+        posCmpd = which(REMP()$comboId == input$setPos)
+        posConc = which(REMP()$CONC == as.numeric(input$posConc))
+        posCtrlWells = REMP()$well[posCmpd[which(posCmpd %in% posConc)]]
+
+        # Get the list of the wells that the selected compound is in
+        conc = as.numeric(REMP()$CONC[which(REMP()$comboId == input$cmpdSelect)])
+        concOrder = sort.int(conc, index.return=T)
+        wells = as.character(REMP()$well[which(REMP()$comboId == input$cmpdSelect)])[concOrder$ix]
+
+        # Get the negative control well values
+        y = switch( input$logFeatureValues,
+          'Log10' = log10(unlist(
+                      mapply(function(negWell){
+                        InCell()$cellList[[ input$featureColDist ]][[ negWell ]]
+                      }, as.character(negCtrlWells), SIMPLIFY=T, USE.NAMES=F))),
+          'Log2' = log2(unlist(
+                      mapply(function(negWell){
+                        InCell()$cellList[[ input$featureColDist ]][[ negWell ]]
+                      }, as.character(negCtrlWells), SIMPLIFY=T, USE.NAMES=F))),
+          'None' = unlist(
+                      mapply(function(negWell){
+                        InCell()$cellList[[ input$featureColDist ]][[ negWell ]]
+                      }, as.character(negCtrlWells), SIMPLIFY=T, USE.NAMES=F))
+        )
+        data=list()
+        data$neg = JSONify(data.frame(x=density(y, na.rm=T)$x, y=density(y, na.rm=T)$y))
+
+
+
+        # Get the Positive Control Well Values
+        y = switch( input$logFeatureValues,
+                    'Log10' = log10(unlist(
+                      mapply(function(posWell){
+                        InCell()$cellList[[ input$featureColDist ]][[ posWell ]]
+                      }, as.character(posCtrlWells), SIMPLIFY=T, USE.NAMES=F))),
+                    'Log2' = log2(unlist(
+                      mapply(function(posWell){
+                        InCell()$cellList[[ input$featureColDist ]][[ posWell ]]
+                      }, as.character(posCtrlWells), SIMPLIFY=T, USE.NAMES=F))),
+                    'None' = unlist(
+                      mapply(function(posWell){
+                        InCell()$cellList[[ input$featureColDist ]][[ posWell ]]
+                      }, as.character(posCtrlWells), SIMPLIFY=T, USE.NAMES=F))
+        )
+        data$pos = JSONify(data.frame(x=density(y, na.rm=T)$x, y=density(y, na.rm=T)$y))
+
+        # Generate the plots
+        n = length(wells)
+        for( i in 1:length(wells) ){
+          # Get the values for the stat tests
+          x = switch( input$logFeatureValues,
+                      'Log10' = log10(InCell()$cellList[[ input$featureColDist ]][[ wells[i] ]]),
+                      'Log2'  = log2(InCell()$cellList[[ input$featureColDist ]][[ wells[i] ]]),
+                      'None'  = InCell()$cellList[[ input$featureColDist ]][[ wells[i] ]]
+          )
+
+          if( length(x) < 1 ){
+            data[[paste0("c",i)]] = NULL
+          }else{
+            data[[paste0("c",i)]] = JSONify(data.frame(x=density(x, na.rm=T)$x, y=density(x, na.rm=T)$y))
+          }
+        }
+
+        # Get the values for
+        x = switch( input$logFeatureValues,
+                    'Log10' = log10(unlist(InCell()$cellList[[ input$featureColDist ]][ wells ])),
+                    'Log2'  = log2(unlist(InCell()$cellList[[ input$featureColDist ]][ wells ])),
+                    'None'  = unlist(InCell()$cellList[[ input$featureColDist ]][ wells ])
+        )
+        label = switch( input$logFeatureValues,
+                    'Log10' = "Log10 Feature Value",
+                    'Log2'  = "Log2 Feature Value",
+                    'None'  = "Feature Value"
+        )
+        data$all = JSONify(data.frame(x=density(x, na.rm=T)$x, y=density(x, na.rm=T)$y))
+
+        seriesData=mapply(function(n){
+          list(
+            name=paste0(prettyNum(concOrder$x[n], digits=3, width=4)," uM"),
+            type="line",
+            linewidth=1,
+            zIndex=1,
+            data=data[[paste0("c",n)]],
+            visible=is.even(n)
+          )
+        }, 1:length(wells), SIMPLIFY=F, USE.NAMES=F)
+
+        seriesData[[length(wells)+1]] = list(
+          name="DMSO",
+          type="area",
+          linewidth=1,
+          zIndex=0,
+          data=data$neg
+          )
+
+        seriesData[[length(wells)+2]] = list(
+          name=paste0(gsub("\\)", "", strsplit(input$setPos, " \\(")[[1]][2]), " [", format(input$posConc, digits=2, width=4), "uM]"),
+          type="area",
+          linewidth=1,
+          zIndex=-1,
+          data=data$pos
+        )
+
+
+
+        ## Highcarts Options ##
+        myChart=list(
+          chart=list(
+            zoomType='x'
+          ),
+          credits=list(
+            enabled=FALSE
+          ),
+          title=list(
+            text=input$cmpdSelect,
+            align='left'
+          ),
+          subtitle=list(
+            text="Kernel Density Distribution Estimate",
+            align='left'
+          ),
+          xAxis=list(
+            title=list(
+              text=label
+            )
+          ),
+          yAxis=list(
+            title=list(
+              text="Density"
+            )
+          ),
+          tooltip=list(
+            shared=TRUE,
+            crosshairs=TRUE
+          ),
+          legend=list(
+            enabled=TRUE
+          ),
+          series=seriesData
+        )
+
+        return(list(chart=myChart))
+      }
+    })
 
 
 
@@ -1115,6 +1453,9 @@ shinyServer(function(input, output, session) {
 
       ## Highcarts Options ##
       myChart=list(
+        chart=list(
+          marginRight=125
+        ),
         credits=list(
           enabled=FALSE
         ),
@@ -1142,7 +1483,13 @@ shinyServer(function(input, output, session) {
           crosshairs=TRUE
         ),
         legend=list(
-          enabled=TRUE
+          enabled=TRUE,
+          layout='vertical',
+          align='right',
+          verticalAlign='top',
+          x=-10,
+          y=30,
+          floating=TRUE
         ),
         series=list(
           list(
@@ -1360,5 +1707,33 @@ shinyServer(function(input, output, session) {
     }
   })
 
+
+  # Y Slider Plus/Minus Buttons
+  observe({
+    if( !is.null(input$ySlideMinus) && input$ySlideMinus > 0 ){
+      newValue = isolate(input$ySlide)-1
+      updateSliderInput(session, 'ySlide', value=newValue)
+    }
+  })
+  observe({
+    if( !is.null(input$ySlidePlus) && input$ySlidePlus > 0 ){
+      newValue = isolate(input$ySlide)+1
+      updateSliderInput(session, 'ySlide', value=newValue)
+    }
+  })
+
+  # X Slider Plus/Minus Buttons
+  observe({
+    if( !is.null(input$xSlideMinus) && input$xSlideMinus > 0 ){
+      newValue = isolate(input$xSlide)-1
+      updateSliderInput(session, 'xSlide', value=newValue)
+    }
+  })
+  observe({
+    if( !is.null(input$xSlidePlus) && input$xSlidePlus > 0 ){
+      newValue = isolate(input$xSlide)+1
+      updateSliderInput(session, 'xSlide', value=newValue)
+    }
+  })
 
 })
