@@ -1,0 +1,24 @@
+QC="<p>The Quality Control module is designed so that glaring problems in the dataset can be quickly and easily identified.  A large heatmap displays the values of any feature for quick visual inspection, while a small histogram shows the distribution of the feature across the plate.  Click on any well of the heatmap to generate a boxplot showing the distribution the selected feature within that well.</P>
+<hr>
+<h3>Inputs</h3>
+<ul>
+  <li><p><strong>Select a Feature</strong> This dropdown input is populated from the headings found in the InCell file that is loaded.  When 'Cell Number' is selected, the intrawell distribution boxplot will not be drawn.</p></li>
+</ul>
+<hr>
+<h3>Outputs</h3>
+<ul>
+  <li><p><strong>Summary Statistics</strong> Descriptive statistics of the entire plate:</p>
+      <ul>
+        <li><em>Min:</em> The lowest value in the dataset</li>
+        <li><em>1st Quartile:</em> The data value marking the boundary between the lowest 25% of values in the dataset and the rest of the data</li>
+        <li><em>Median:</em> The data value that separates the highest half of the data from the lowest half</li>
+        <li><em>Mean:</em> The central value of the dataset</li>
+        <li><em>3rd Quartile:</em> The data value marking the boundary between the lowest 75% of values in the dataset and the rest of the data</li>
+        <li><em>Max:</em> The highest value in the dataset</li>
+      </ul>
+    </li>
+    <li><p><strong>Heatmap</strong> A color-coded representation of the values of each well of the dataset arrayed in the format of a 384-well plate.  The X and Y  axes represent physical coordinates of the corresponding well in the plate.  The color scale represents the range of values for the chosen feature. Hover the cursor over a well to view it's coordinates and the value of the chosen feature averaged across all cells in the well.  Clicking the well produces a new boxplot output.</p></li>
+    <li><p><strong>Histogram</strong> The distribution of the chosen feature across the entire plate.  Useful for quickly determining whether data is skewed or otherwise not normally distributed</p></li>
+    <li><p><strong>Boxplot</strong> A box-and-whiskers plot displaying the distribution of the selected feature within the selected well.  Click on a well in the heatmap to generate or update the boxplot.  Each imaging field is included as a seprate category in the plot; the DMSO treated control well distribution is appended to the fields of the selected well as an additional category.</p></li>
+</ul>
+<br/>"

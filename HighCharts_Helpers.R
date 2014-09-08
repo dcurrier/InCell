@@ -24,4 +24,13 @@ resetAllSeries = "          if(HighchartsAddOn.mouseWasOver) {
                                       allSeries[i].update(HighchartsAddOn[this.chart.renderTo.id][i].options);
                                     }
                                   }  "
+getPointValues="
+                            var attr = { x: this.x,
+                                         y: this.y,
+                                         value: this.value,
+                                         color: this.color,
+                                         name: this.series.name };
 
+                            console.debug(this);
+
+                            Shiny.onInputChange(this.series.chart.renderTo.id, attr); "

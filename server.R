@@ -113,6 +113,9 @@ shinyServer(function(input, output, session) {
         updateSelectizeInput(session, 'xFeat',
                              choices = names(data$well)[which(names(data$well) != "Well")],
                              selected="Cell Count")
+        updateSelectizeInput(session, 'feat',
+                             choices = names(data$well)[which(names(data$well) != "Well")],
+                             selected="Cell Count")
         updateSelectizeInput(session, 'fieldWell',
                              choices = as.character(data$well$Well),
                              selected=as.character(data$well$Well[1]))
@@ -135,6 +138,9 @@ shinyServer(function(input, output, session) {
                              choices = names(data$well)[which(names(data$well) != "Well")],
                              selected="Cell Count")
         updateSelectizeInput(session, 'xFeat',
+                             choices = names(data$well)[which(names(data$well) != "Well")],
+                             selected="Cell Count")
+        updateSelectizeInput(session, 'feat',
                              choices = names(data$well)[which(names(data$well) != "Well")],
                              selected="Cell Count")
         updateSelectizeInput(session, 'fieldWell',
@@ -502,6 +508,31 @@ shinyServer(function(input, output, session) {
 
 
 
+  ## Any|Conc Tab ##
+  ############### featSlider ###############
+  output$featSlider = renderUI({
+    if( !is.null(InCell()) && !is.null(REMP()) && input$featThresh != "None" && input$feat != "Cell Count" ){
+
+      # Calculate the range of data for this feature
+      if( input$feat %in% names(InCell()$cellList) ){
+        rng = range(unlist(InCell()$cellList[[input$feat]]), na.rm=T)
+      }else{
+        rng = range(InCell()$field[, input$feat], na.rm=T)
+      }
+
+
+      # Generate slider
+      fluidRow(
+        column(2, actionButton('featSlideMinus', label="", icon='minus', styleclass="link", style="margin-top: 34px;")),
+        column(8, sliderInput('featSlide', label="Threshold", min=floor(rng[1]), max=ceiling(rng[2]), value=mean(rng), step=1)),
+        column(2, actionButton('featSlidePlus', label="", icon='plus', styleclass="link", style="margin-top: 34px;"))
+      )
+    }
+  })
+
+
+
+
 
 
 
@@ -585,6 +616,18 @@ shinyServer(function(input, output, session) {
         tooltip=list(
           headerFormat='{series.name} <br/>',
           pointFormat='{point.name}: <b>{point.value}</b><br/>'
+        ),
+
+        plotOptions=list(
+          series=list(
+            point=list(
+              events=list(
+                click=getPointValues,
+                mouseOver=NULL,
+                mouseOut=NULL
+              )
+            )
+          )
         ),
 
         series=list(
@@ -806,7 +849,7 @@ shinyServer(function(input, output, session) {
 
 
   ## Any|Any Tab ##
-  ############### AnyAny ###############
+  ############### Any|Any ###############
   # Large Plot
   output$AnyAny = renderHighcharts({
     noPlot = is.null(input$yFeat) || is.null(input$xFeat) || is.null(input$yTrans) || is.null(input$xTrans) ||
@@ -910,6 +953,37 @@ shinyServer(function(input, output, session) {
 
       }, compounds, length(compounds), SIMPLIFY=F, USE.NAMES=F)
 
+      # Generate plotLines
+      if( input$vLineShow ){
+        verticalLines = list(
+          list(
+            color='#B1B1B1',
+            width=2,
+            value=input$vLine,
+            label=list(
+              text=if(input$vLineName != 'Label') input$vLineName
+              )
+            )
+          )
+      }else{
+        verticalLines = NULL
+      }
+
+      if( input$hLineShow ){
+        horizontalLines = list(
+          list(
+            color='#B1B1B1',
+            width=2,
+            value=input$hLine,
+            label=list(
+              text=if(input$hLineName != 'Label') input$hLineName
+            )
+          )
+        )
+      }else{
+       horizontalLines = NULL
+      }
+
 
       ## Highcarts Options ##
       myChart=list(
@@ -924,7 +998,7 @@ shinyServer(function(input, output, session) {
           align='left'
         ),
         subtitle=list(
-          text=input$cmpdAnyAny,
+          text="",
           align='left'
         ),
         plotOptions=list(
@@ -953,7 +1027,8 @@ shinyServer(function(input, output, session) {
             format=if(input$xThresh == "None") '{value}' else '{value}%'
           ),
           min=if(input$xThresh == "None") NULL else 0,
-          max=if(input$xThresh == "None") NULL else 100
+          max=if(input$xThresh == "None") NULL else 100,
+          plotLines=verticalLines
         ),
         yAxis=list(
           title=list(
@@ -966,7 +1041,8 @@ shinyServer(function(input, output, session) {
             format=if(input$yThresh == "None") '{value}' else '{value}%'
           ),
           min=if(input$yThresh == "None") NULL else 0,
-          max=if(input$yThresh == "None") NULL else 100
+          max=if(input$yThresh == "None") NULL else 100,
+          plotLines=horizontalLines
         ),
         legend=list(
           enabled = TRUE,
@@ -1272,6 +1348,290 @@ shinyServer(function(input, output, session) {
         return(list(chart=myChart))
       }
     })
+
+
+
+
+
+    ## Any|Conc Tab ##
+    ############### Any|Conc ###############
+    # Large Any|Conc Plot
+    output$AnyConc = renderHighcharts({
+      noPlot = is.null(input$feat) || is.null(input$featTrans) || is.null(input$featThresh) ||
+               is.null(InCell()) || is.null(REMP()) || (input$feat == "Cell Count")
+
+      if( !noPlot ){
+        compounds = unique(REMP()$comboId[which(REMP()$SAMPLE != "DMSO")])
+        seriesData = mapply(function(cmpd, n){
+          # Pull Values for the x and y data
+          if( input$feat %in% names(InCell()$cellList) ){
+            f = InCell()$cellList[[input$feat]]
+          }else{
+            f = InCell()$field[, input$feat]
+          }
+
+          # Get the list of the wells that the selected compound is in
+          conc = as.numeric(REMP()$CONC[which(REMP()$comboId == cmpd)])
+          concOrder = sort.int(conc, index.return=T)
+          wells = as.character(REMP()$well[which(REMP()$comboId == cmpd)])[concOrder$ix]
+
+          # Generate X Data
+          x = log10(concOrder$x)
+
+          # Generate Y Data
+          y = unlist(mapply(function(w){
+            # Get data
+            if( input$feat %in% names(InCell()$cellList) ){
+              t = unlist(f[[w]])
+            }else{
+              t = f[which(InCell()$field$Well == as.character(w))]
+            }
+            c = if(input$featThresh != "None") input$featSlide else 1
+
+            # Transform if needed
+            if( input$featTrans == "Log10" ){
+              t = log10(t)
+              c = log10(c)
+            }
+            if( input$featTrans == "Log2" ){
+              t = log2(t)
+              c = log2(c)
+            }
+
+            # Threshold
+            switch( input$featThresh,
+                    "% Above" = prettyNum(sum(t > c)/length(t)*100, digits=3, width=4),
+                    "% Below" = prettyNum(sum(t < c)/length(t)*100, digits=3, width=4),
+                    "None" = prettyNum(mean(t), digits=3, width=4) )
+
+          }, wells, SIMPLIFY=F, USE.NAMES=F))
+
+          # Generate the series name
+          comboName = strsplit(cmpd, " \\(")[[1]]
+          if( comboName[2] == ")" ){
+            showName = comboName[1]
+          }else{
+            showName = sub(")", "", comboName[2])
+          }
+
+          list(
+            animation=FALSE,
+            name=showName,
+            type="scatter",
+            data=JSONify(data.frame(x=as.numeric(x), y=as.numeric(y),
+                                    name=paste0(prettyNum(concOrder$x, digits=3, width=4), "uM")),
+                         element.names=c("x", "y", "name"))
+          )
+
+        }, compounds, length(compounds), SIMPLIFY=F, USE.NAMES=F)
+
+
+        ## Highcarts Options ##
+        myChart=list(
+          chart=list(
+            marginRight=250
+          ),
+          credits=list(
+            enabled=FALSE
+          ),
+          title=list(
+            text=paste0("Dose Response of ", input$feat),
+            align='left'
+          ),
+          subtitle=list(
+            text="",
+            align='left'
+          ),
+          plotOptions=list(
+            series=list(
+              events=list(
+                mouseOver = dimOtherSeries,
+                mouseOut = resetAllSeries
+              ),
+              marker=list(
+                states=list(
+                  hover=list(
+                    enabled=FALSE
+                  )
+                )
+              )
+            )
+          ),
+          xAxis=list(
+            title=list(
+              text="Log10 Conc [uM]"
+            )
+          ),
+          yAxis=list(
+            title=list(
+              text=switch( input$featThresh,
+                           "% Above" = paste0("% Cells with ", input$feat, " > ", input$featSlide),
+                           "% Below" = paste0("% Cells with ", input$feat, " < ", input$featSlide),
+                           "None" = input$feat)
+            ),
+            labels=list(
+              format=if(input$featThresh == "None") '{value}' else '{value}%'
+            ),
+            min=if(input$featThresh == "None") NULL else 0,
+            max=if(input$featThresh == "None") NULL else 100
+          ),
+          legend=list(
+            enabled = TRUE,
+            layout='vertical',
+            align='right',
+            verticalAlign='top',
+            x=-10,
+            y=30,
+            floating=TRUE
+          ),
+          tooltip=list(
+            enabled=FALSE,
+            formatter="return this.series.name + ' [' + this.point.name + ']<br/>X: <b>' + this.x + '</b>   Y: <b>' + this.y + '</b>'"
+          ),
+          series=seriesData
+        )
+
+        return(list(chart=myChart))
+
+      }
+    })
+
+
+
+  ############### featThresh ###############
+  # Y Axis Feature Thresholding Plot #
+  output$featThreshPlot = renderHighcharts({
+    noPlot = is.null(input$feat) || is.null(input$featTrans) || is.null(input$featThresh) ||
+      is.null(InCell()) || is.null(REMP()) ||(input$feat == "Cell Count")
+
+    if( !noPlot ){
+      # Get the list of negative control wells
+      negCtrlWells = REMP()$well[which(REMP()$SAMPLE == "DMSO")]
+      posCmpd = which(REMP()$comboId == input$setPos)
+      posConc = which(REMP()$CONC == as.numeric(input$posConc))
+      posCtrlWells = REMP()$well[posCmpd[which(posCmpd %in% posConc)]]
+
+      # Generate Neg Y Data
+      NegY = unlist(mapply(function(w){
+        # Get data
+        if( input$feat %in% names(InCell()$cellList) ){
+          t = unlist(InCell()$cellList[[input$feat]][w])
+        }else{
+          t = InCell()$field[which(InCell()$field$Well == as.character(w)), input$feat]
+        }
+        c = if(input$featThresh != "None") input$featSlide else 1
+
+        # Transform if needed
+        if( input$featTrans == "Log10" ){
+          t = log10(t)
+          c = log10(c)
+        }
+        if( input$featTrans == "Log2" ){
+          t = log2(t)
+          c = log2(c)
+        }
+
+        # Threshold
+        switch( input$featThresh,
+                "% Above" = sum(t > c)/length(t)*100,
+                "% Below" = sum(t < c)/length(t)*100,
+                "None" = mean(t) )
+
+      }, negCtrlWells, SIMPLIFY=F, USE.NAMES=F))
+
+      # Generate Pos Y Data
+      PosY = unlist(mapply(function(w){
+        # Get data
+        if( input$feat %in% names(InCell()$cellList) ){
+          t = unlist(InCell()$cellList[[input$feat]][w])
+        }else{
+          t = InCell()$field[which(InCell()$field$Well == as.character(w)), input$feat]
+        }
+        c = if(input$featThresh != "None") input$featSlide else 1
+
+        # Transform if needed
+        if( input$featTrans == "Log10" ){
+          t = log10(t)
+          c = log10(c)
+        }
+        if( input$featTrans == "Log2" ){
+          t = log2(t)
+          c = log2(c)
+        }
+
+        # Threshold
+        switch( input$featThresh,
+                "% Above" = sum(t > c)/length(t)*100,
+                "% Below" = sum(t < c)/length(t)*100,
+                "None" = mean(t) )
+
+      }, posCtrlWells, SIMPLIFY=F, USE.NAMES=F))
+
+      # Add Jitter to the data
+      pos = mapply(function(v){
+        c( v, jitter(0, factor=5))
+      }, PosY, SIMPLIFY=F, USE.NAMES=F)
+
+      neg = mapply(function(v){
+        c( v, jitter(0, factor=5))
+      }, NegY, SIMPLIFY=F, USE.NAMES=F)
+
+
+
+      # Highcharts Options
+      myChart=list(
+        credits=list(
+          enabled=FALSE
+        ),
+        chart=list(
+          type='scatter'
+        ),
+        title=list(
+          text=""
+        ),
+        subtitle=list(
+          text="Feature Thresholding Tool",
+          align='left'
+        ),
+        xAxis=list(
+          title=list(
+            text=if(input$featThresh != "None") paste0(input$featThresh, " ", input$featSlide) else input$featFeat
+          ),
+          min=if(input$featThresh != "None") 0 else min(c(NegY, PosY)),
+          max=if(input$featThresh != "None") 100 else max(c(NegY, PosY))
+        ),
+        yAxis=list(
+          title=list(
+            text=""
+          ),
+          min=-0.2,
+          max=0.2,
+          labels=list(
+            enabled=FALSE
+          )
+        ),
+        legend=list(
+          enabled=TRUE
+        ),
+        series=list(
+          list(
+            name="DMSO",
+            color=getHighchartsColors()[1],
+            type="scatter",
+            data=neg
+          ),
+          list(
+            name=paste0(gsub("\\)", "", strsplit(input$setPos, " \\(")[[1]][2]), " [", format(input$posConc, digits=2, width=4), "uM]"),
+            color=getHighchartsColors()[2],
+            type="scatter",
+            data=pos
+          )
+        )
+      )
+
+      return(list(chart=myChart))
+    }
+  })
 
 
 
@@ -1604,13 +1964,6 @@ shinyServer(function(input, output, session) {
 
 
 
-
-
-
-
-
-
-
   ############### Observers ###############
 
   # Debug
@@ -1733,6 +2086,20 @@ shinyServer(function(input, output, session) {
     if( !is.null(input$xSlidePlus) && input$xSlidePlus > 0 ){
       newValue = isolate(input$xSlide)+1
       updateSliderInput(session, 'xSlide', value=newValue)
+    }
+  })
+
+  # Feat Slider Plus/Minus Buttons
+  observe({
+    if( !is.null(input$featSlideMinus) && input$featSlideMinus > 0 ){
+      newValue = isolate(input$featSlide)-1
+      updateSliderInput(session, 'featSlide', value=newValue)
+    }
+  })
+  observe({
+    if( !is.null(input$featSlidePlus) && input$featSlidePlus > 0 ){
+      newValue = isolate(input$featSlide)+1
+      updateSliderInput(session, 'featSlide', value=newValue)
     }
   })
 

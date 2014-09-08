@@ -67,6 +67,10 @@ shinyUI(fluidPage(
                       )),
              ##################### QC Tab #####################
              tabPanel("QC",
+                      # Help Button
+                      div(class="pull-right",
+                          modalButton(label="", styleclass="link", size="large", icon="question-circle", modal.id="QChelp",
+                                      css.class="help fa-lg")),
                       div(
                         selectizeInput('featureCol', label=h4("Select a Feature"),
                                        choices=c("Cell Count"),
@@ -76,6 +80,10 @@ shinyUI(fluidPage(
                         class="well tab-well")),
              ##################### Any|Any Tab #####################
              tabPanel("Any|Any",
+                      # Help Button
+                      div(class="pull-right",
+                          modalButton(label="", styleclass="link", size="large", icon="question-circle", modal.id="AAhelp",
+                                      css.class="help fa-lg")),
                       div(
                         h4("Y Axis Feature"),
                         selectizeInput('yFeat', label="",
@@ -102,29 +110,44 @@ shinyUI(fluidPage(
                         uiOutput('xSlider'),
                         hr(),
                         h4("Add Lines"),
-                        fluidRow(
-                          column(7, checkboxInput('hLineShow', label="Horizontal", value=F)),
-                          column(4, numericInput('hLine', label="", value=0))
-                        ),
+                        checkboxInput('hLineShow', label="Horizontal", value=F),
                         fluidRow(
                           column(7, textInput('hLineName', label="", value="Label")),
-                          column(5, selectizeInput('hLineColor', label="",
-                                                   choices=c("Color", getHighchartsColors()),
-                                                   selected="Color"))
+                          column(4, offest=1, numericInput('hLine', label="", value=0))
                         ),
+                        br(),
+                        checkboxInput('vLineShow', label="Vertical", value=F),
                         fluidRow(
-                          column(7, checkboxInput('vLineShow', label="Vertical", value=F)),
-                          column(4, numericInput('vLine', label="", value=0))
-                          ),
-                          fluidRow(
-                            column(7, textInput('vLineName', label="", value="Label")),
-                            column(5, selectizeInput('vLineColor', label="",
-                                                     choices=c("Color", getHighchartsColors()),
-                                                     selected="Color"))
-                          ),
+                          column(7, textInput('vLineName', label="", value="Label")),
+                          column(4, offest=1, numericInput('vLine', label="", value=0))
+                        ),
+                        class="well tab-well")),
+             ##################### Any|Conc Tab #####################
+             tabPanel("Any|Conc",
+                      # Help Button
+                      div(class="pull-right",
+                          modalButton(label="", styleclass="link", size="large", icon="question-circle", modal.id="AChelp",
+                                      css.class="help fa-lg")),
+                      div(
+                        h4("Y Axis Feature"),
+                        selectizeInput('feat', label="",
+                                       choices=c("Cell Count"),
+                                       selected="Cell Count", width="100%"),
+                        fluidRow(
+                          column(6, radioButtons('featTrans', label="Y Axis Transform",
+                                                 choices=c("None", "Log10", "Log2"))   ),
+                          column(6,radioButtons('featThresh', label="Y Axis Threshold",
+                                                choices=c("None", "% Above", "% Below"))   )
+                        ),
+                        uiOutput('featSlider'),
+
                         class="well tab-well")),
              ##################### Feature Tab #####################
              tabPanel("Feature",
+                      # Help Button
+                      div(class="pull-right",
+                          modalButton(label="", styleclass="link", size="large", icon="question-circle", modal.id="Feathelp",
+                                      css.class="help fa-lg")),
                       div(
                         selectizeInput('featureColDist', label=h4("Select a Feature"),
                                        choices=c("Cell Count"),
@@ -188,6 +211,17 @@ shinyUI(fluidPage(
                column(6, highchartsOutput('xThreshPlot', height="250px", include=c("base", "more", "export", "no-data") ))
              )
            ),
+           ##################### Any|Conc Pane #####################
+           # Any over Any Display Panel - Plot any feature over any other
+           conditionalPanel(
+             condition="input.tabs == 'Any|Conc'",
+             div( highchartsOutput('AnyConc', height="470px", include=c("base", "more", "export", "no-data", "dim-on-hover") ),
+                  class="padding-bottom: 30px"),
+             br(),
+             fluidRow(
+               column(6, highchartsOutput('featThreshPlot', height="250px", include=c("base", "more", "export", "no-data") ))
+             )
+           ),
            ##################### Feature Pane #####################
            # Feature Display Panel - Kernel Density Plot, Z-Stat Plot, AUC Plot
            conditionalPanel(
@@ -202,6 +236,12 @@ shinyUI(fluidPage(
            )
     )
   ),
+  ##################### Help Modals #####################
+  modalPanel("QChelp", header=h2("Quality Control"), body=QC),
+  modalPanel("AAhelp", header=h2("Any Feature versus Any Feature"), body=p("Some stuff")),
+  modalPanel("AChelp", header=h2("Any Feature versus Concentration"), body=p("Some stuff")),
+  modalPanel("Feathelp", header=h2("Feature Value Distribution"), body=p("Some stuff")),
+
   ##################### Header Tags #####################
   tags$head(
     tags$style("
@@ -219,6 +259,12 @@ shinyUI(fluidPage(
                  .color{
                   width: 60px;
                  }
+                .help, .help:focus{
+                 color: #F89406;
+                }
+                .help:hover{
+                 color: #F88300;
+                }
                  "
     )
     #tags$script(type="text/javascript", src="iframeResizer.contentWindow.min.js")
