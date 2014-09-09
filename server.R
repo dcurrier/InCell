@@ -1967,15 +1967,15 @@ shinyServer(function(input, output, session) {
   ############### Observers ###############
 
   # Debug
-  observe(label="console",{
-    if(input$console != 0) {
-      options(browserNLdisabled=TRUE)
-      saved_console<-".RDuetConsole"
-      if (file.exists(saved_console)) load(saved_console)
-      isolate(browser())
-      save(file=saved_console,list=ls(environment()))
-    }
-  })
+#   observe(label="console",{
+#     if(input$console != 0) {
+#       options(browserNLdisabled=TRUE)
+#       saved_console<-".RDuetConsole"
+#       if (file.exists(saved_console)) load(saved_console)
+#       isolate(browser())
+#       save(file=saved_console,list=ls(environment()))
+#     }
+#   })
 
   observe({
     updateSelectizeInput(session, 'fieldColumn', selected=input$wellColumn)

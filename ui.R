@@ -66,7 +66,7 @@ shinyUI(fluidPage(
                             )
                         ),
                         br(),
-                        actionButton('console', label="Show Console"),
+                        #actionButton('console', label="Show Console"),
                         class="well tab-well"
                       )),
              ##################### QC Tab #####################
