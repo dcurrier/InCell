@@ -1,0 +1,16 @@
+<p>The Feature module is designed to give an overview of the activity of a compound on a feature of interest.  By setting a feature and scrolling through the compounds, the user can quickly identify the compounds that are affecting the chosen feature.  A large, main plot shows the distribution of feature values for each concentration of the compound tested.  Shaded series show how the current compound compares to positive and negative controls.  For each concentration, statistical tests are performed to quantify any difference from the negative control.  These values are z-score transformed and plotted in a smaller plot below the main plot.  From this analysis, the area under each statistic's curve is calculated to give an overall difference from the negative control.</P>
+<hr>
+<h3>Inputs</h3>
+<ul>
+  <li><p><strong>Select a Feature</strong> The feature for which to plot distributions. This dropdown input is populated from the headings found in the InCell file that is loaded.  When 'Cell Number' is selected, no plots will be drawn.</p></li>
+  <li><p><strong>Select a Compound</strong> The compound for which to plot distributions.  The values in the dropdown are populated from the REMP PlateLookup file that was selected in the 'Data' tab.  Use the previous and next buttons below the dropdown to advance or rollback the compound shown o nthe plot.</p></li>
+  <li><p><strong>Log Transform Feature Values</strong> Which type of transformation to apply to the data.  Some features are better viewed on a logarithmic axis.</p></li>
+</ul>
+<hr>
+<h3>Outputs</h3>
+<ul>
+    <li><p><strong>Distribution Plot</strong> Line plot showing the kernel density estimations for each concentration of the chosen compound.  The shaded series show kernel density estimations for negative and positive controls.  By default, every other series is hidden to make the plot less complicated.  To show the series, simply click the series name in the legend.  To show a zoomed view of the plot, click and drag to select an area of the plot to zoom in on.  In zoom view, a rest button will appeart to reset the plot.</p></li>
+    <li><p><strong>Statistic Plot</strong> Comparisons between each concentration and the negative control are tested for statistical significance.  The test statistics generated are z-score normalized using the median and median absolute deviation of the negative controls.  The normalized test statistics are plotted over concentration to produce this plot.  Included as a series on this plot is the z-score normalized cell number for each well.  This enabled changes in the number of cells to be quickly identified as a confounder in the analysis.</p></li>
+    <li><p><strong>Area Under the Cure Plot</strong> The shaded area under the statistic curves on the Statistic Plot are calculated and represented by bars in this plot.  Hover over the bar to view it's exact value.</p></li>
+</ul>
+<br/>

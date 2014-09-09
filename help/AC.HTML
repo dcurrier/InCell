@@ -1,0 +1,16 @@
+<p>The Any|Conc module facilitates plotting any feature versus the compound concentration.  Feature values can be log transformed and/or thresholded.  A single, smaller plot, below the main feature plot, assist in setting thresholds by showing the distribution of positive and negative controls.</P>
+<hr>
+<h3>Inputs</h3>
+<ul>
+  <li><p><strong>Y Axis Feature</strong> The feature to plot on the specified axis.  The dropdown is populated from the column heading in the InCell file provided.</p></li>
+  <li><p><strong>Y Axis Transform</strong> Which type of transformation to apply to the data.</p></li>
+  <li><p><strong>Y Axis Threshold</strong> Whether to apply a threshold to the data.  If an option other than 'None' is selected the values plotted will be the percentage above or below the value set with the slider.</p></li>
+  <li><p><strong>Y Axis Threshold Slider</strong> The threshold value selector.  Use the Plus and Minus buttons to adjust the slider value in increments of one; drag the slider for coarse control.</p></li>
+</ul>
+<hr>
+<h3>Outputs</h3>
+<ul>
+    <li><p><strong>Any|Conc Plot</strong> A scatter plot showing the value of each well of the plate in the coordiantes of the feature chosen over the concentration of compound.  Each compound is plotted as a distinct series.  Series can be hidden by clicking the name of the compound in the legend.  If the legend length exceeds the height of the plot the legend will be scrollable.  Hovering the cursor over a symbol on the plot will highlight that point and the rest of it's series.</p></li>
+    <li><p><strong>Y Axis Thresholding Tool</strong> The positive and negative control values of the feature chosen are plotted to show the distribution of the controls and assist in choosing a threshold value that can differentiate them.  When an option other than 'None' is chosen for the Axis Threshold this plot will show either the percent above or the percent below the Threshold Slider value.  An optimal threshold value will result in all negative controls at 0% and all positive controls at 100%.</p></li>
+</ul>
+<br/>

@@ -1,0 +1,19 @@
+<p>The Any|Any module facilitates plotting any feature versus any other feature.  Feature values can be log transformed and/or thresholded.  The plot can be annotated with a single horizontal and a single vertical line.  Lines can be labeled and placed at any value on the axis.  Smaller plots, below the main feature plot, assist in setting thresholds by showing the distribution of positive and negative controls.</P>
+<hr>
+<h3>Inputs</h3>
+<ul>
+  <li><p><strong>Y/X Axis Feature</strong> The feature to plot on the specified axis.  The dropdown is populated from the column heading in the InCell file provided.</p></li>
+  <li><p><strong>Y/X Axis Transform</strong> Which type of transformation to apply to the data.</p></li>
+  <li><p><strong>Y/X Axis Threshold</strong> Whether to apply a threshold to the data.  If an option other than 'None' is selected the values plotted will be the percentage above or below the value set with the slider.</p></li>
+  <li><p><strong>Y/X Axis Threshold Slider</strong> The threshold value selector.  Use the Plus and Minus buttons to adjust the slider value in increments of one; drag the slider for coarse control.</p></li>
+  <li><p><strong>Add Horizontal/Vertical Line</strong> Whether to show a horizontal or vertical line on the plot.</p></li>
+  <li><p><strong>Label</strong> The text to use as a label for the specified line.</p></li>
+  <li><p><strong>Value</strong> The value at which to draw the line.</p></li>
+</ul>
+<hr>
+<h3>Outputs</h3>
+<ul>
+    <li><p><strong>Any|Any Plot</strong> A scatter plot showing the value of each well of the plate in the coordiantes of the features chosen.  Each compound is plotted as a series whith the symbol size corresponding to concentration - larger symbols means higher concentration.  Series can be hidden by clicking the name of the compound in the legend.  If the legend length exceeds the height of the plot the legend will be scrollable.  Hovering the cursor over a symbol on the plot will highlight that point and the rest of it's series.</p></li>
+    <li><p><strong>Y/X Axis Thresholding Tool</strong> The positive and negative control values of the feature chosen for the specified axis are plotted to show the distribution of the controls and assist in choosing a threshold value that can differentiate them.  When an option other than 'None' is chosen for the Axis Threshold this plot will show either the percent above or the percent below the Threshold Slider value.  An optimal threshold value will result in all negative controls at 0% and all positive controls at 100%.</p></li>
+</ul>
+<br/>

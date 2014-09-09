@@ -1,0 +1,27 @@
+<p>The Data Import module assists in bringing data into the application for downstream analysis.  Two data files are required for analysis: an InCell derived file, and a REMP Platemap file.  For convenience, these files can be uploaded directly to the app using the file upload functions; however, there is a maximum upload size of 45 Mb.  To work around that limitation, files can be placed in the Shiny Dropbox folder on the storage server and accessed from within the app using the dropdowns.</P>
+<hr>
+<h3>Inputs</h3>
+<ul>
+  <li><p><strong>Import InCell File</strong> Choose an InCell file to analyze using either the file upload tool or, if the file is already in the Shiny Dropbox, choose the file from the dropdown.  There is a 45 Mb maximum file size for uploading files.  InCell files must be saved in CSV format.  The file parser will find the header rows for each data level and separate them into distinct tables.</p></li>
+  <li><p><strong>Import REMP PlateLookup File</strong> To annotate the data with the compounds and concentrations, a REMP PlateLookup file is required.  This file should contain only data for the compound and control plates that were used to treat the assay plate in the InCell file.  If mutliple compound or control plates are detected in the file, a reasonable attempt will be made to include annotations from one compound plate and one control plate only.</p></li>
+  <li><p><strong>Check for New Files</strong> If the file you are looking for is not listed in one of the dropdown boxes, and it was recently placed in the Shiny Dropbox, clicking this button will rescan the folder and add the file to the proper dropdown.</p></li>
+  <br/>
+  <li><p><strong>Control Columns</strong> The user must specify which columns received compounds from the control plate.  Control columns can be specified by listing each column sparated by a comma (ie 21,33,23,24) or listing the minimum and maximum columns separated by a hyphen (ie 21-24).  The default is to use columns 21-24 as control columns.</p></li>
+  <li><p><strong>Set Positive Control</strong> From the list of compounds in the REMP PlateLookup file, the user must choose a compound to use as the positive control in later analysis.  In addition to choosing a positive control compound, the user must also choose the concentration of that compound to use as the positive control.  The default concentration is the maximal concentration for that compound.</p></li>
+</ul>
+<hr>
+<h3>Outputs</h3>
+<ul>
+    <li><p><strong>Summary Statistics</strong> Low-level statistics about the plate derived from the data files loaded.</p>
+      <ul>
+          <li><em>Data Files:</em> The file names of the InCell and REMP PlateLookup files loaded</li>
+          <li><em>Total Wells:</em> The number of wells of data loaded from the InCell file</li>
+          <li><em>Total Cells Counted:</em> The total number of cell for which there is cell-level data</li>
+          <li><em>Total Fields:</em> The total number of fields loaded</li>
+          <li><em>Mean Fields Per Well:</em> The average number of fields per well.  This number is calculated from the total number of fields and the number of wells.</li>
+        </ul>
+      </li>
+      <li><strong>Data File Download</strong> Each data table is available to download individually in CSV format.  Simply click the download button for the data table needed.  Data table headers are compressed to one row by adding a hyphen between lines.</li>
+</ul>
+<br/>
+

@@ -23,6 +23,10 @@ shinyUI(fluidPage(
     div(tabsetPanel(id="tabs",
              ##################### Data Tab #####################
              tabPanel("Data",
+                      # Help Button
+                      div(class="pull-right",
+                          modalButton(label="", styleclass="link", size="large", icon="question-circle", modal.id="Datahelp",
+                                      css.class="help fa-lg")),
                       div(
                         conditionalPanel(
                           condition="output.fileUploaded || output.fileUploaded == null",
@@ -153,13 +157,13 @@ shinyUI(fluidPage(
                                        choices=c("Cell Count"),
                                        selected="Cell Count", width="100%"),
                         selectizeInput('cmpdSelect', label=h4("Select a Compound"),
-                                       choices=c(""), selected=""),
+                                       choices=c(""), selected="", width="100%"),
                         fluidRow(
                           column(6, div( actionButton('prv', label='', styleclass='primary',
-                                                      icon='chevron-left', icon.library='font awesome'),
+                                                      icon='long-arrow-left', icon.library='font awesome'),
                                          class="pull-left")),
                           column(6, div( actionButton('nxt', label='', styleclass='primary',
-                                                      icon='chevron-right', icon.library='font awesome'),
+                                                      icon='long-arrow-right', icon.library='font awesome'),
                                          class="pull-right"))
                         ),
                         br(),
@@ -237,10 +241,11 @@ shinyUI(fluidPage(
     )
   ),
   ##################### Help Modals #####################
+  modalPanel("Datahelp", header=h2("Data Import"), body=Data),
   modalPanel("QChelp", header=h2("Quality Control"), body=QC),
-  modalPanel("AAhelp", header=h2("Any Feature versus Any Feature"), body=p("Some stuff")),
-  modalPanel("AChelp", header=h2("Any Feature versus Concentration"), body=p("Some stuff")),
-  modalPanel("Feathelp", header=h2("Feature Value Distribution"), body=p("Some stuff")),
+  modalPanel("AAhelp", header=h2("Any Feature versus Any Feature"), body=AA),
+  modalPanel("AChelp", header=h2("Any Feature versus Concentration"), body=AC),
+  modalPanel("Feathelp", header=h2("Feature Value Distribution"), body=Feat),
 
   ##################### Header Tags #####################
   tags$head(
