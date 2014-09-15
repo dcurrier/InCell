@@ -24,6 +24,7 @@ resetAllSeries = "          if(HighchartsAddOn.mouseWasOver) {
                                       allSeries[i].update(HighchartsAddOn[this.chart.renderTo.id][i].options);
                                     }
                                   }  "
+
 getPointValues="
                             var attr = { x: this.x,
                                          y: this.y,
