@@ -37,6 +37,7 @@ shinyUI(fluidPage(
                                  fileInput('annotation', label=h4("REMP Plate Lookup File")),
                                  selectizeInput('annotationDB', label="",
                                                 choices=c("Choose from Dropbox", "No Files Found"), selected="Choose from Dropbox"),
+                                 checkboxInput('noCtlPlate', label="All control wells contain DMSO", value=FALSE),
                                  hr(),
                                  actionButton("updateDropBox", label="Check for new files")
                                ),
@@ -173,6 +174,15 @@ shinyUI(fluidPage(
                                h5("Negative Controls"),
                                tableOutput('statSummary'),
                                class="well tab-well")),
+                    ##################### Activity Tab #####################
+                    tabPanel("Activity",
+                             # Help Button
+                             div(class="pull-right",
+                                 modalButton(label="", styleclass="link", size="large", icon="question-circle", modal.id="Acthelp",
+                                             css.class="help fa-lg")),
+                             div(
+
+                               class="well tab-well")),
                     position='left'
     ),
     class="span4",
@@ -277,6 +287,24 @@ shinyUI(fluidPage(
                  )
                )
              )
+           ),
+           ##################### Action Pane #####################
+           # Mechanism of Action Panel -
+           conditionalPanel(
+             condition="input.tabs == 'Action'",
+             # No files have been uploaded
+             div(
+               conditionalPanel(
+                 condition="output.fileUploaded || output.fileUploaded == null",
+                 img(src="Instructions/NoPlot.png")),
+               # Files are ready
+               conditionalPanel(
+                 condition="!output.fileUploaded && output.fileUploaded != null",
+                 div( highchartsOutput("temp1", height="470px", include=c("base", "more", "no-data")),
+                      class="padding-bottom: 30px")
+
+               )
+             )
            )
     )
   ),
@@ -286,6 +314,7 @@ shinyUI(fluidPage(
   modalPanel("AAhelp", header=h2("Any Feature versus Any Feature"), body=AA),
   modalPanel("AChelp", header=h2("Any Feature versus Concentration"), body=AC),
   modalPanel("Feathelp", header=h2("Feature Value Distribution"), body=Feat),
+  modalPanel("Acthelp", header=h2("Mechanism of Action Prediction"), body=Act),
 
   ##################### Header Tags #####################
   tags$head(

@@ -176,7 +176,7 @@ shinyServer(function(input, output, session) {
       }
 
       # Parse the annotation file
-      t = Parse_REMP(path, ctl)
+      t = Parse_REMP(path, ctl, input$noCtlPlate)
 
       # Update selectize input for compound names
       updateSelectizeInput(session, 'cmpdSelect',
@@ -206,7 +206,7 @@ shinyServer(function(input, output, session) {
       }
 
       # Parse the annotation file
-      t = Parse_REMP(path, ctl)
+      t = Parse_REMP(path, ctl, input$noCtlPlate)
 
       # Update selectize input for compound names
       updateSelectizeInput(session, 'cmpdSelect',

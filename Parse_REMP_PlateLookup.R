@@ -4,14 +4,14 @@
 # Duane Currier - 08/06/2014
 #
 
-Parse_REMP = function(path, ctl){
+Parse_REMP = function(path, ctl, noCtl){
   # Read in the data file
   data = read.table(path, header=T, sep="\t", fill=TRUE)
 
   nPlates = length(unique(data$currplateid))
 
   # Check for too few plates in the file
-  if( nPlates < 2 ){
+  if( nPlates < 2 && !noCtl ){
     return(NULL)
   }
 
