@@ -79,35 +79,10 @@ ReadInCell = function(file, tables=c("cell", "field", "well"), progressBar=FALSE
     cellData = data.frame(Well=wellID, Field=fieldID, cellData[, which(names(cellData) != "Well")])
     names(cellData) = c("Well", "Field", header[-1])
     out[["cell"]] = cellData
-
-    # Update Progress Bar
-    if( progressBar ){ eval(setProgress(value = 0.2, detail='Parsing Cell Level Data'), parent.frame(n=2)) }
-
-
-    # Split the Cell Level data into a list of lists
-    dataCols = names(out$cell)[!(names(out$cell) %in% c("Well", "Field", "Cell"))]
-
-    # Reformat Cell table to a list of features, each containing a list of the wells, each containing a vector of the values
-    feature=mapply(function(col){
-      w=mapply(function(well){
-        # Get the values for the current column
-        eval(parse(text=paste0("out$cell$`",col,"`[which(out$cell$Well == '",well,"')]")))
-      }, as.character(unique(out$cell$Well)), SIMPLIFY=T, USE.NAMES=T)
-      #names(w) = unique(out$cell$Well)
-
-      # Update Progress Bar
-      if( progressBar ){ eval(setProgress(value = (0.2+(which(dataCols == col)/length(dataCols)*0.6)),
-                                          detail='Parsing Cell Level Data'), parent.frame(n=3)) }
-
-      list(w)
-    }, dataCols, SIMPLIFY=T, USE.NAMES=T)
-    #names(feature) = dataCols
-
-    out[["cellList"]] = feature
   }
 
   # Update Progress Bar
-  if( progressBar ){ eval(setProgress(value = 0.8, detail='Parsing Field Level Data'), parent.frame(n=2)) }
+  if( progressBar ){ eval(setProgress(value = dim(cellData)[1]/length(temp), detail='Parsing Field Level Data'), parent.frame(n=2)) }
 
 
   # Get Field Level Data
@@ -147,7 +122,7 @@ ReadInCell = function(file, tables=c("cell", "field", "well"), progressBar=FALSE
   }
 
   # Update Progress Bar
-  if( progressBar ){ eval(setProgress(value = 0.9, detail='Parsing Well Level Data'), parent.frame(n=2)) }
+  if( progressBar ){ eval(setProgress(value = (dim(fieldData)[1]+dim(cellData)[1])/length(temp), detail='Parsing Well Level Data'), parent.frame(n=2)) }
 
 
   # Get Well Level Data

@@ -181,7 +181,16 @@ shinyUI(fluidPage(
                                  modalButton(label="", styleclass="link", size="large", icon="question-circle", modal.id="Acthelp",
                                              css.class="help fa-lg")),
                              div(
-
+                               selectizeInput('cmpdAct', label=h4("Select a Compound"),
+                                              choices=c(""), selected="", width="100%"),
+                               fluidRow(
+                                 column(6, div( actionButton('prvAct', label='', styleclass='primary',
+                                                             icon='long-arrow-left', icon.library='font awesome'),
+                                                class="pull-left")),
+                                 column(6, div( actionButton('nxtAct', label='', styleclass='primary',
+                                                             icon='long-arrow-right', icon.library='font awesome'),
+                                                class="pull-right"))
+                               ),
                                class="well tab-well")),
                     position='left'
     ),
