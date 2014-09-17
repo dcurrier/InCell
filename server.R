@@ -164,6 +164,31 @@ shinyServer(function(input, output, session) {
 
 
 
+  ############### Feature Means ###############
+  # Store and sync compound selection
+  featureMeans = reactive({
+    if( !is.null(InCell()) ){
+    # Generate well labels
+    name = paste0(unlist(mapply(function(i){rep(i,24)},LETTERS[1:16], SIMPLIFY=F, USE.NAMES=F)), rep(formatC(c(1:24), width=2, digit=0, flag="0"), 16))
+
+    # Get data from InCell() - Look in well table first, calculate from cell table if the data is not in well table
+    if( input$featureCol %in% names(InCell()$well) ){
+      v = eval(parse(text=paste("InCell()$well$`", input$featureCol,"`", sep="")))
+    }else{
+      v = unlist(mapply(function(n){
+        x = subsetInCell(n, input$featureCol, InCell()$cell)
+        if( length(x) < 1 ) v = 0
+        mean(x, na.rm=T)
+      }, name, SIMPLIFY=F, USE.NAMES=F))
+    }
+
+    return(v)
+    }
+  })
+
+
+
+
   ############### Compound ###############
   # Store and sync compound selection
   compound = reactive({
@@ -228,48 +253,79 @@ shinyServer(function(input, output, session) {
 
   ############### doseCurveStats ###############
   doseCurveStats = reactive({
-    if( is.null(REMP()) || is.null(compound()) || is.null(InCell()) ||
-          (is.null(input$featureColDist) && !(input$featureColDist %in% names(InCell()$cell)))
-          || is.null(negCtrlDist()) )  return()
+    if( is.null(REMP()) || is.null(InCell()) || is.null(negCtrlDist()) )  return()
 
-    # Get the list of the wells that the selected compound is in
-    conc = as.numeric(REMP()$CONC[which(REMP()$comboId == compound())])
-    concOrder = sort.int(conc, index.return=T)
-    wells = as.character(REMP()$well[which(REMP()$comboId == compound())])[concOrder$ix]
+    withProgress(session, min=0, max=1, {
+      setProgress(message='Calculating Distribution Statistics')
 
-    # Get the list of negative control wells
-    negCtrlWells = REMP()$well[which(REMP()$SAMPLE == "DMSO")]
+      featureList = names(InCell()$cell)[which(!(names(InCell()$cell) %in% c("Well", "Field", "Cell")))]
+      compoundList = unique(REMP()$comboId)
 
-    y = unlist(
-      mapply(function(negWell){
-        subsetInCell(negWell, input$featureColDist, InCell()$cell)
-      }, as.character(negCtrlWells), SIMPLIFY=T, USE.NAMES=F))
+      d=mapply(function(cmpd){
+        # Update Progress Bar
+        cmpdProgress = (which(compoundList == cmpd)-1)/length(compoundList)
+        setProgress(value=cmpdProgress, detail=cmpd)
 
-    d=mapply(function(w, c){
-      # Get the values for the stat tests
-      x = subsetInCell(w, input$featureColDist, InCell()$cell)
-      if( length(x) < 1 ){
-        ks=NA
-        cvmts=NA
-      }else{
-        # Calculate Statistics
-        ks=suppressWarnings(f_ks(x,y))
-        cvmts=f_cvmts(x,y)
-      }
-      # Z Transform
-      ks.z=(ks - negCtrlDist()[[input$featureColDist]]$ks.median)/negCtrlDist()[[input$featureColDist]]$ks.mad
-      cvmts.z=(cvmts - negCtrlDist()[[input$featureColDist]]$cvmts.median)/negCtrlDist()[[input$featureColDist]]$cvmts.mad
+        mapply(function(feature){
+          # Get the list of the wells that the selected compound is in
+          conc = as.numeric(REMP()$CONC[which(REMP()$comboId == cmpd)])
+          concOrder = sort.int(conc, index.return=T)
+          wells = as.character(REMP()$well[which(REMP()$comboId == cmpd)])[concOrder$ix]
 
-      # Calculate z transformed cell number
-      DMSO = which(InCell()$well$Well %in% REMP()$well[which(REMP()$SAMPLE == "DMSO")])
-      current = which(InCell()$well$Well %in% w)
-      cn.z = (InCell()$well$`Cell Count`[current] - median(InCell()$well$`Cell Count`[DMSO]))/mad(InCell()$well$`Cell Count`[DMSO])
+          # Get the list of negative control wells
+          negCtrlWells = REMP()$well[which(REMP()$SAMPLE == "DMSO")]
 
-      # store stats
-      list(ks=ks, ks.z=ks.z, cvmts=cvmts, cvmts.z=cvmts.z, conc=c, cellNum=cn.z )
-    }, wells, concOrder$x, SIMPLIFY=T, USE.NAMES=T)
+          y = unlist(
+            mapply(function(negWell){
+              subsetInCell(negWell, feature, InCell()$cell)
+            }, as.character(negCtrlWells), SIMPLIFY=T, USE.NAMES=F))
 
-    return(d)
+          mapply(function(w, c){
+            # Get the values for the stat tests
+            x = subsetInCell(w, feature, InCell()$cell)
+            if( length(x) < 1 ){
+              ks=NA
+              cvmts=NA
+            }else{
+              # Calculate Statistics
+              ks=suppressWarnings(f_ks(x,y))
+              cvmts=f_cvmts(x,y)
+            }
+            # Z Transform
+            if(negCtrlDist()[[feature]]$ks.mad != 0){
+              ks.z=(ks - negCtrlDist()[[feature]]$ks.median)/negCtrlDist()[[feature]]$ks.mad
+            }else{
+              ks.z=(ks - negCtrlDist()[[feature]]$ks.median)
+            }
+
+            if(negCtrlDist()[[feature]]$cvmts.mad != 0){
+              cvmts.z=(cvmts - negCtrlDist()[[feature]]$cvmts.median)/negCtrlDist()[[feature]]$cvmts.mad
+            }else{
+              cvmts.z=(cvmts - negCtrlDist()[[feature]]$cvmts.median)
+            }
+
+            # Calculate z transformed cell number
+            DMSO = which(InCell()$well$Well %in% REMP()$well[which(REMP()$SAMPLE == "DMSO")])
+            current = which(InCell()$well$Well %in% w)
+            cn.z = (InCell()$well$`Cell Count`[current] - median(InCell()$well$`Cell Count`[DMSO]))/mad(InCell()$well$`Cell Count`[DMSO])
+
+            # Set progress bar
+            featureProgress = cmpdProgress + (which(featureList == feature)/length(featureList)/length(compoundList))
+            setProgress(value=featureProgress)
+
+            # store stats
+            list(ks=ks, ks.z=ks.z, cvmts=cvmts, cvmts.z=cvmts.z, conc=c, cellNum=cn.z )
+          }, wells, concOrder$x, SIMPLIFY=T, USE.NAMES=T)
+
+        }, featureList, SIMPLIFY=F, USE.NAMES=T)
+
+      }, compoundList, SIMPLIFY=F, USE.NAMES=T)
+
+      setProgress(value=0.99, detail="wrapping up")
+
+      return(d)
+    })
+
   })
 
 
@@ -366,9 +422,9 @@ shinyServer(function(input, output, session) {
   ############### wellData ###############
   # Statistics section of Well tab
   output$wellData = renderText({
-    # Generate parameter distribution statistics
-    v = eval(parse(text=paste0('InCell()$well$`',input$featureCol, '`')))
-    stats = as.list(summary(v))
+
+    # Calculate parameter distribution statistics
+    stats = as.list(summary(featureMeans()))
 
     # make output
     paste0(
@@ -496,15 +552,14 @@ shinyServer(function(input, output, session) {
   ############### highHeat ###############
   # Large Heatmap
   output$highHeat = renderHighcharts({
-    if( !is.null(InCell()$well) ){
+    if( !is.null(InCell()$well) && !is.null(featureMeans()) ){
       rows = unlist(mapply(function(i){rep(i,24)},c(0:15), SIMPLIFY=F, USE.NAMES=F))
       cols = rep(c(0:23), 16)
 
       # Generate well labels
-      name = paste0(unlist(mapply(function(i){rep(i,24)},LETTERS[1:16], SIMPLIFY=F, USE.NAMES=F)), rep(c(1:24), 16))
+      name = paste0(unlist(mapply(function(i){rep(i,24)},LETTERS[1:16], SIMPLIFY=F, USE.NAMES=F)), rep(formatC(c(1:24), width=2, digit=0, flag="0"), 16))
 
-      # Pull out the values
-      values = eval(parse(text=paste("InCell()$well$`", input$featureCol,"`", sep="")))
+      values = featureMeans()
 
       # Put data into a table
       data = data.frame(cols,rows,values,name)
@@ -599,9 +654,8 @@ shinyServer(function(input, output, session) {
   ############### miniHist ###############
   # Mini Histogram
   output$miniHist = renderHighcharts({
-    if( !is.null(InCell()$well) ){
-      v = eval(parse(text=paste0('InCell()$well$`',input$featureCol, '`')))
-      h=hist(v, plot=F)
+    if( !is.null(featureMeans()) ){
+      h=hist(featureMeans(), plot=F)
 
       # Highcharts options
       myChart=list(
@@ -1668,9 +1722,9 @@ shinyServer(function(input, output, session) {
 
         # Get the values for
         x = switch( input$logFeatureValues,
-                    'Log10' = log10(unlist( subsetInCell(wells, input$featureColDist, InCell()$cell) )),
-                    'Log2'  = log2(unlist( subsetInCell(wells, input$featureColDist, InCell()$cell) )),
-                    'None'  = unlist( subsetInCell(wells, input$featureColDist, InCell()$cell) )
+                    'Log10' = log10(unlist( mapply(function(w){ subsetInCell(w, input$featureColDist, InCell()$cell) }, wells, SIMPLIFY=F, USE.NAMES=F) )),
+                    'Log2'  = log2(unlist( mapply(function(w){ subsetInCell(w, input$featureColDist, InCell()$cell) }, wells, SIMPLIFY=F, USE.NAMES=F) )),
+                    'None'  = unlist( mapply(function(w){ subsetInCell(w, input$featureColDist, InCell()$cell) }, wells, SIMPLIFY=F, USE.NAMES=F) )
         )
         label = switch( input$logFeatureValues,
                     'Log10' = "Log10 Feature Value",
@@ -1754,13 +1808,13 @@ shinyServer(function(input, output, session) {
   # Mini Stat Z Plot
   output$miniZStat = renderHighcharts({
     if( !is.null(doseCurveStats()) && !is.null(input$featureColDist) &&
-          (input$featureColDist %in% names(InCell()$cell)) ){
+          (input$featureColDist %in% names(InCell()$cell)) && !is.null(compound()) ){
 
       # get the z stat vectors
-      ks.z = round(as.numeric(unlist(doseCurveStats()['ks.z', ])), 3)
-      cvmts.z = round(as.numeric(unlist(doseCurveStats()['cvmts.z', ])), 3)
-      conc = round(as.numeric(log10(unlist(doseCurveStats()['conc', ]))), 2)
-      cells = round(as.numeric(unlist(doseCurveStats()['cellNum', ])), 3)
+      ks.z = round(as.numeric(unlist(doseCurveStats()[[compound()]][[input$featureColDist]]['ks.z', ])), 3)
+      cvmts.z = round(as.numeric(unlist(doseCurveStats()[[compound()]][[input$featureColDist]]['cvmts.z', ])), 3)
+      conc = round(as.numeric(log10(unlist(doseCurveStats()[[compound()]][[input$featureColDist]]['conc', ]))), 2)
+      cells = round(as.numeric(unlist(doseCurveStats()[[compound()]][[input$featureColDist]]['cellNum', ])), 3)
 
 
 
@@ -1844,13 +1898,13 @@ shinyServer(function(input, output, session) {
   # Mini Area Under the Curve Plot
   output$miniAUC = renderHighcharts({
     if( !is.null(doseCurveStats()) && !is.null(input$featureColDist) &&
-          (input$featureColDist %in% names(InCell()$cell)) ){
+          (input$featureColDist %in% names(InCell()$cell)) && !is.null(compound())  ){
 
       # get the z stat vectors
-      ks.z = round(as.numeric(unlist(doseCurveStats()['ks.z', ])), 3)
-      cvmts.z = round(as.numeric(unlist(doseCurveStats()['cvmts.z', ])), 3)
-      conc = round(as.numeric(log10(unlist(doseCurveStats()['conc', ]))), 2)
-      cells = round(as.numeric(unlist(doseCurveStats()['cellNum', ])), 3)
+      ks.z = round(as.numeric(unlist(doseCurveStats()[[compound()]][[input$featureColDist]]['ks.z', ])), 3)
+      cvmts.z = round(as.numeric(unlist(doseCurveStats()[[compound()]][[input$featureColDist]]['cvmts.z', ])), 3)
+      conc = round(as.numeric(log10(unlist(doseCurveStats()[[compound()]][[input$featureColDist]]['conc', ]))), 2)
+      cells = round(as.numeric(unlist(doseCurveStats()[[compound()]][[input$featureColDist]]['cellNum', ])), 3)
 
       # Get indexes of the ordered conc
       id = order(conc)
@@ -1916,6 +1970,101 @@ shinyServer(function(input, output, session) {
 
 
 
+  ## Action Tab ##
+  ############### All AUC ###############
+  # All feature AUC plot
+  output$allAUC = renderHighcharts({
+    if( !is.null(doseCurveStats()) && !is.null(compound()) && !is.null(InCell()) ){
+      # get all possible features
+      featureList = names(InCell()$cell)[which(!(names(InCell()$cell) %in% c("Well", "Field", "Cell")))]
+
+      # pull out the CVMTS stats
+      cvmts = unlist(mapply(function(f){
+        # Get the stats and concs
+        stats = round(as.numeric(unlist(doseCurveStats()[[compound()]][[f]]['cvmts.z', ])), 3)
+        conc = round(as.numeric(log10(unlist(doseCurveStats()[[compound()]][[f]]['conc', ]))), 2)
+
+        # Order by conc
+        id = order(conc)
+
+        # calculate the AUC
+        if( !is.na(stats) && !is.na(conc) ){
+          a=auc(x=conc[id], y=stats[id])
+
+          if( a < 0 ) -sqrt(abs(a)) else sqrt(abs(a))
+        }else{
+          NA
+        }
+
+      }, featureList, SIMPLIFY=T, USE.NAMES=F))
+
+      # pull out the KS stats
+      ks = unlist(mapply(function(f){
+        # Get the stats and concs
+        stats = round(as.numeric(unlist(doseCurveStats()[[compound()]][[f]]['ks.z', ])), 3)
+        conc = round(as.numeric(log10(unlist(doseCurveStats()[[compound()]][[f]]['conc', ]))), 2)
+
+        # Order by conc
+        id = order(conc)
+
+        # calculate the AUC
+        if( !is.na(stats) && !is.na(conc) ){
+          a=auc(x=conc[id], y=stats[id])
+
+          if( a < 0 ) -sqrt(abs(a)) else sqrt(abs(a))
+        }else{
+          NA
+        }
+
+      }, featureList, SIMPLIFY=T, USE.NAMES=F))
+
+      # Generate Highchart
+      myChart=list(
+        credits=list(
+          enabled=FALSE
+        ),
+        chart=list(
+          type='column'
+        ),
+        title=list(
+          text='Areas Under the Curve of All Features',
+          align='left'
+        ),
+        subtitle=list(
+          text=compound(),
+          align='left'
+        ),
+        xAxis=list(
+          categories=featureList,
+          labels=list(
+            enabled=FALSE
+          )
+        ),
+        yAxis=list(
+          min=-10,
+          max=10,
+          title=list(
+            text='AUC'
+          )
+        ),
+        series=list(
+          list(
+            name='CVMTS',
+            data=round(cvmts, 2)
+            ),
+          list(
+            name='KS',
+            data=round(ks, 2)
+          )
+        )
+      )
+
+      return(list(chart=myChart))
+    }
+  })
+
+
+
 
 
   ############### Observers ###############
@@ -1947,19 +2096,19 @@ shinyServer(function(input, output, session) {
   observe({
     # Update Selectize Inputs
     updateSelectizeInput(session, 'featureCol',
-                         choices = names(InCell()$well)[which(names(InCell()$well) != "Well")],
+                         choices = c("Cell Count", names(InCell()$cell)[which(!(names(InCell()$cell) %in% c("Well", "Field", "Cell")))]),
                          selected="Cell Count")
     updateSelectizeInput(session, 'featureColDist',
-                         choices = names(InCell()$well)[which(names(InCell()$well) != "Well")],
+                         choices = c("Cell Count", names(InCell()$cell)[which(!(names(InCell()$cell) %in% c("Well", "Field", "Cell")))]),
                          selected="Cell Count")
     updateSelectizeInput(session, 'yFeat',
-                         choices = names(InCell()$well)[which(names(InCell()$well) != "Well")],
+                         choices = c("Cell Count", names(InCell()$cell)[which(!(names(InCell()$cell) %in% c("Well", "Field", "Cell")))]),
                          selected="Cell Count")
     updateSelectizeInput(session, 'xFeat',
-                         choices = names(InCell()$well)[which(names(InCell()$well) != "Well")],
+                         choices = c("Cell Count", names(InCell()$cell)[which(!(names(InCell()$cell) %in% c("Well", "Field", "Cell")))]),
                          selected="Cell Count")
     updateSelectizeInput(session, 'feat',
-                         choices = names(InCell()$well)[which(names(InCell()$well) != "Well")],
+                         choices = c("Cell Count", names(InCell()$cell)[which(!(names(InCell()$cell) %in% c("Well", "Field", "Cell")))]),
                          selected="Cell Count")
     updateSelectizeInput(session, 'fieldWell',
                          choices = as.character(InCell()$well$Well),

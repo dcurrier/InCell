@@ -300,7 +300,7 @@ shinyUI(fluidPage(
            ##################### Action Pane #####################
            # Mechanism of Action Panel -
            conditionalPanel(
-             condition="input.tabs == 'Action'",
+             condition="input.tabs == 'Activity'",
              # No files have been uploaded
              div(
                conditionalPanel(
@@ -309,7 +309,7 @@ shinyUI(fluidPage(
                # Files are ready
                conditionalPanel(
                  condition="!output.fileUploaded && output.fileUploaded != null",
-                 div( highchartsOutput("temp1", height="470px", include=c("base", "more", "no-data")),
+                 div( highchartsOutput("allAUC", height="270px", include=c("base", "more", "no-data")),
                       class="padding-bottom: 30px")
 
                )
