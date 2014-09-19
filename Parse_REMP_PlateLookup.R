@@ -58,8 +58,9 @@ Parse_REMP = function(path, ctl, noCtl){
   synonyms = unlist(mapply(function(value){
     if(is.na(value)) return(NA)
 
-    first = strsplit(as.character(value), " \\| ")[[1]][1]
+    first = strsplit(as.character(value), "\\|")[[1]][1]
     if( nchar(first) > 20 ) first = strtrim(first, 20)
+    first =sub("\\s+$", "", first)
 
     return(first)
 
