@@ -34,27 +34,27 @@ getDropboxFiles = function(){
   # Get list of files in the folder
   allFiles = list.files(path)
 
+  csvFiles = list(`Choose from Dropbox`="")
+  txtFiles = list(`Choose from Dropbox`="")
   # Get list of csv Files
-  csvFiles = mapply(function(f){
+  for(i in 1:length(allFiles)){
+    f = allFiles[i]
+
+    # Get file type
     splt = strsplit(f, "[.]")[[1]]
     type = splt[length(splt)]
+
     if( type %in% c("csv", "CSV") ){
       info = file.info(paste0(path, "/", f))
-      list(path=paste0(path, "/", f), size=info[1, 'size']/1000000)
+      csvFiles[[paste0(f, " [",round(info[1, 'size']/1000000, 0),"Mb]")]] = paste0(path, "/", f)
     }
-  },allFiles, SIMPLIFY=F, USE.NAMES=T)
-  csvFiles[sapply(csvFiles, is.null)] <- NULL
 
-  #get List of txt Files
-  txtFiles = mapply(function(f){
-    splt = strsplit(f, "[.]")[[1]]
-    type = splt[length(splt)]
     if( type %in% c("txt", "TXT") ){
       info = file.info(paste0(path, "/", f))
-      list(path=paste0(path, "/", f), size=info[1, 'size']/1000000)
+      txtFiles[[paste0(f, " [",round(info[1, 'size']/1000, 0),"kb]")]] = paste0(path, "/", f)
     }
-  },allFiles, SIMPLIFY=F, USE.NAMES=T)
-  txtFiles[sapply(txtFiles, is.null)] <- NULL
+
+  }
 
   # Return the lists of files
   list(csv=csvFiles, txt=txtFiles)
@@ -93,6 +93,7 @@ shinyServer(function(input, output, session) {
   # Get Dropbox File List
   Dropbox = reactive({
     input$updateDropbox
+
     getDropboxFiles()
   })
 
@@ -110,10 +111,10 @@ shinyServer(function(input, output, session) {
         # Return
         return(data)
       })
-    }else if( !is.null(input$InCellDB) && input$InCellDB != "Choose from Dropbox" ){
+    }else if( !is.null(input$InCellDB) && input$InCellDB %in% Dropbox()$csv && !(input$InCellDB %in%  c("Choose from Dropbox", "")) ){
       withProgress(session, min=0, max=1, {
         setProgress(message='Parsing InCell File')
-        data = ReadInCell(Dropbox()$csv[[input$InCellDB]]$path, progressBar=TRUE )
+        data = ReadInCell(input$InCellDB, progressBar=TRUE )
 
         # Return
         return(data)
@@ -131,9 +132,9 @@ shinyServer(function(input, output, session) {
       # Get the datapath
       path = input$annotation[1, 'datapath']
 
-    }else if( !is.null(input$annotationDB) && input$annotationDB != "Choose from Dropbox" ){
+    }else if( !is.null(input$annotationDB) && input$annotationDB %in% Dropbox()$txt && !(input$annotationDB %in% c("Choose from Dropbox", "")) ){
       # Get the datapath
-      path = Dropbox()$txt[[input$annotationDB]]$path
+      path = input$annotationDB
 
     }else{
       path = NULL
@@ -218,11 +219,16 @@ shinyServer(function(input, output, session) {
       negStats=mapply(function(name){
         # Tabulate the ks and cvmts statistics for each well
         t=mapply(function(well){
+          # Pull data from dataframe
           x = subsetInCell(well, name, InCell()$cell)
           y = unlist(
-            mapply(function(negWell, well){
+            mapply(function(negWell){
               if(negWell != well) subsetInCell(negWell, name, InCell()$cell)
-            }, as.character(negCtrlWells), well, SIMPLIFY=T, USE.NAMES=F))
+            }, as.character(negCtrlWells), SIMPLIFY=T, USE.NAMES=F))
+
+          # Remove any NaN entries
+          x = na.omit(x)
+          y = na.omit(y)
 
           list(ks=suppressWarnings(f_ks(x,y)), cvmts=f_cvmts(x,y))
         }, as.character(negCtrlWells), SIMPLIFY=T, USE.NAMES=T)
@@ -279,18 +285,21 @@ shinyServer(function(input, output, session) {
             mapply(function(negWell){
               subsetInCell(negWell, feature, InCell()$cell)
             }, as.character(negCtrlWells), SIMPLIFY=T, USE.NAMES=F))
+          y = na.omit(y)
 
-          mapply(function(w, c){
+          t=mapply(function(w, c){
             # Get the values for the stat tests
             x = subsetInCell(w, feature, InCell()$cell)
+            x = na.omit(x)
             if( length(x) < 1 ){
-              ks=NA
-              cvmts=NA
+              ks = NA
+              cvmts = NA
             }else{
               # Calculate Statistics
               ks=suppressWarnings(f_ks(x,y))
               cvmts=f_cvmts(x,y)
             }
+
             # Z Transform
             if(negCtrlDist()[[feature]]$ks.mad != 0){
               ks.z=(ks - negCtrlDist()[[feature]]$ks.median)/negCtrlDist()[[feature]]$ks.mad
@@ -315,7 +324,16 @@ shinyServer(function(input, output, session) {
 
             # store stats
             list(ks=ks, ks.z=ks.z, cvmts=cvmts, cvmts.z=cvmts.z, conc=c, cellNum=cn.z )
+
           }, wells, concOrder$x, SIMPLIFY=T, USE.NAMES=T)
+
+          if( NA %in% unlist(t) ){
+            for( i in 1:dim(t)[2] ){
+              if( "NA's" %in% names(summary(t[,i])) ) t = t[, -i]
+            }
+          }
+
+         return(t)
 
         }, featureList, SIMPLIFY=F, USE.NAMES=T)
 
@@ -350,16 +368,14 @@ shinyServer(function(input, output, session) {
   outputOptions(output, 'fileUploaded', suspendWhenHidden=FALSE)
 
 
-
-
   ############### dataset ###############
   # Statistics secton of Data tab
   output$dataset = renderText({
     if( !is.null(input$InCell) ) ICname = input$InCell[1,'name']
-    if( input$InCellDB != "InCell File" ) ICname = input$InCellDB
+    if( input$InCellDB != "Choose from Dropbox" ) ICname = strsplit(names(which(Dropbox()$csv == input$InCellDB)), " \\[")[[1]][1]
 
     if( !is.null(input$annotation) ) REMPname = input$annotation[1,'name']
-    if( input$annotationDB != "InCell File" ) REMPname = input$annotationDB
+    if( input$annotationDB != "Choose from Dropbox" ) REMPname = strsplit(names(which(Dropbox()$txt == input$annotationDB)), " \\[")[[1]][1]
 
     if( exists('ICname') && exists('REMPname') && !is.null(ICname) && !is.null(REMPname) ){
       paste0(
@@ -416,6 +432,9 @@ shinyServer(function(input, output, session) {
       write.csv(InCell()$cell, file=file, row.names=F)
     }
   )
+
+
+
 
 
   ## QC Tab ##
@@ -2064,6 +2083,169 @@ shinyServer(function(input, output, session) {
   })
 
 
+  ############### AUC Clustering ###############
+  # All feature AUC plot
+  output$clusterAUC = renderHighcharts({
+    if( !is.null(doseCurveStats()) && !is.null(REMP()) && !is.null(InCell()) ){
+      # Get feature names and compound list
+      compounds = unique(REMP()$comboId)[which(unique(REMP()$comboId) != "DMSO (NA)")]
+      featureList = names(InCell()$cell)[which(!(names(InCell()$cell) %in% c("Well", "Field", "Cell")))]
+
+      # Tabulate AUCs
+      x = mapply(function(cmpd){
+          unlist(mapply(function(f){
+            if( cmpd %in% names(doseCurveStats()) && f %in% names(doseCurveStats()[[cmpd]]) ){
+              # Get the stats and concs
+              stats = round(as.numeric(unlist(doseCurveStats()[[cmpd]][[f]]['cvmts.z', ])), 3)
+              conc = round(as.numeric(log10(unlist(doseCurveStats()[[cmpd]][[f]]['conc', ]))), 2)
+              # Order by conc
+              id = order(conc)
+              # calculate the AUC
+              if( !is.na(stats) && !is.na(conc) ){
+                a=auc(x=conc[id], y=stats[id])
+                if( a < 0 ) -sqrt(abs(a)) else sqrt(abs(a))
+              }else{
+                NA
+              }
+            }
+          }, featureList, SIMPLIFY=T, USE.NAMES=F))
+        }, compounds, SIMPLIFY=F, USE.NAMES=F)
+
+      # Convert to a dataframe
+      x = t(as.data.frame(x))
+      colnames(x) = featureList
+      row.names(x) = compounds
+
+      # calculate clusters on Compounds
+      cmpdClust = hclust(dist(x))
+      cmpdOrder = cmpdClust$order
+
+      # Calculate clusters on features
+      featClust = hclust(dist(t(x)))
+      featOrder = featClust$order
+
+
+      # Use Clustered orders to generate the heatmap
+      # Convert values into a vector
+      values = vector()
+      names=vector()
+      rows = vector()
+      cols = vector()
+      for( i in 1:length(featOrder) ){
+        for( j in 1:length(cmpdOrder) ){
+          values = c( values, x[cmpdOrder[j], featOrder[i]] )
+          names  = c( names, paste0(compounds[cmpdOrder[j]], "<br/>", featureList[featOrder[i]], "<br/>") )
+          rows   = c( rows, i-1 )
+          cols   = c( cols, j-1 )
+        }
+      }
+
+      # Put it into a dataframe
+      aucHeat = data.frame(rows, cols, values, names)
+
+
+      # Highcharts options
+      myChart=list(
+        credits=list(
+          enabled=FALSE
+        ),
+
+        chart=list(
+          type='heatmap'
+        ),
+
+        title=list(
+          text='Area Under the Statistic Curve',
+          align='left'
+        ),
+
+        subtitle=list(
+          text="Unsupervised Clustering",
+          align='left'
+        ),
+
+        xAxis=list(
+          categories=compounds[cmpdOrder],
+          opposite=TRUE,
+          lineWidth=0,
+          minorGridLineWidth=0,
+          minorTickLength=0,
+          tickLength=0,
+          lineColor='transparent',
+          title=list(
+            text="Compounds"
+          ),
+          labels=list(
+            enabled=FALSE
+          )
+        ),
+
+        yAxis=list(
+          reversed=TRUE,
+          categories=featureList[featOrder],
+          lineWidth=0,
+          minorGridLineWidth=0,
+          minorTickLength=0,
+          tickLength=0,
+          lineColor='transparent',
+          title=list(
+            text="Features"
+          ),
+          labels=list(
+            enabled=FALSE
+          )
+        ),
+
+        colorAxis=list(
+          min=min(aucHeat$values),
+          #minColor='#ffffff',
+          #maxColor=getHighchartsColors()[1]
+          stops=list(
+            c(0, '#3060cf'),
+            c(0.5, '#ffffff'),
+            c(1, '#c4463a')
+            )
+        ),
+
+        legend=list(
+          align='right',
+          layout='vertical',
+          margin=0,
+          symbolHeight=320
+        ),
+
+        tooltip=list(
+          headerFormat='{series.name} <br/>',
+          pointFormat='{point.name}<b>{point.value}</b><br/>'
+        ),
+
+        plotOptions=list(
+          series=list(
+            point=list(
+              events=list(
+                click=getPointValues,
+                mouseOver=NULL,
+                mouseOut=NULL
+              )
+            ),
+            turboThreshold=0
+          )
+        ),
+
+        series=list(
+          list(
+            name='Areas Uder the Curve',
+            borderWidth=1,
+            data=JSONify(aucHeat, element.names=c("x", "y", "value", "name"))
+          )
+        )
+      )
+
+      return( list(chart=myChart) )
+
+
+    }
+  })
 
 
 
@@ -2206,10 +2388,10 @@ shinyServer(function(input, output, session) {
 
   # Update File dropdowns
   observe({
-    input$updateDropbox
-
-    updateSelectizeInput(session, 'InCellDB', choices = c("Choose from Dropbox", names(Dropbox()$csv)))
-    updateSelectizeInput(session, 'annotationDB', choices = c("Choose from Dropbox", names(Dropbox()$txt)))
+    input$updateDropBox
+    Dropbox()
+    updateSelectizeInput(session, 'InCellDB', choices = Dropbox()$csv, selected="" )
+    updateSelectizeInput(session, 'annotationDB', choices = Dropbox()$txt, selected="" )
   })
 
   # Sync the Feature dropdowns

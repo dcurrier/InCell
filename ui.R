@@ -9,6 +9,7 @@ require(shiny)             # Shiny Framework
 require(shinyIncubator)    # Progress indicator
 require(shinythings)       # Password Input/Better Action buttons
 require(ShinyHighCharts)   # Javascript charting
+
 options(shiny.maxRequestSize=45*1024^2)
 
 shinyUI(fluidPage(
@@ -32,11 +33,11 @@ shinyUI(fluidPage(
                                  condition="output.fileUploaded || output.fileUploaded == null",
                                  fileInput('InCell', label=h4("Import InCell Data File")),
                                  selectizeInput('InCellDB', label="",
-                                                choices=c("Choose from Dropbox", "No Files Found"), selected="Choose from Dropbox"),
+                                                choices=c("Choose from Dropbox", "No Files Found"), selected="Choose from Dropbox "),
                                  hr(),
                                  fileInput('annotation', label=h4("REMP Plate Lookup File")),
                                  selectizeInput('annotationDB', label="",
-                                                choices=c("Choose from Dropbox", "No Files Found"), selected="Choose from Dropbox"),
+                                                choices=c("Choose from Dropbox", "No Files Found"), selected="Choose from Dropbox "),
                                  checkboxInput('noCtlPlate', label="All control wells contain DMSO", value=FALSE),
                                  hr(),
                                  actionButton("updateDropBox", label="Check for new files")
@@ -199,7 +200,7 @@ shinyUI(fluidPage(
     ##################### Content Pane #####################
     column(8,
            ##################### Data Pane #####################
-           # Data Display Panel - Currently Blank
+           # Data Display Panel
            conditionalPanel(
              condition="input.tabs == 'Data'",
              div( conditionalPanel(
@@ -310,8 +311,13 @@ shinyUI(fluidPage(
                conditionalPanel(
                  condition="!output.fileUploaded && output.fileUploaded != null",
                  div( highchartsOutput("allAUC", height="270px", include=c("base", "more", "no-data")),
-                      class="padding-bottom: 30px")
-
+                      class="padding-bottom: 30px"),
+                 br(),
+                 fluidRow(
+                 column(6, div( highchartsOutput("clusterAUC", height="370px", include=c("base", "more", "heatmap", "map", "no-data")),
+                      class="padding-bottom: 30px")),
+                 column(6, div())
+                 )
                )
              )
            )
