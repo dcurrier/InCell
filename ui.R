@@ -316,7 +316,8 @@ shinyUI(fluidPage(
                  fluidRow(
                  column(6, div( highchartsOutput("clusterAUC", height="370px", include=c("base", "more", "heatmap", "map", "no-data")),
                       class="padding-bottom: 30px")),
-                 column(6, div())
+                 column(6, div( highchartsOutput("pca", height="370px", include=c("base", "3d", "no-data")),
+                               class="padding-bottom: 30px"))
                  )
                )
              )

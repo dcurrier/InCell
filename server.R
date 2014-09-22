@@ -10,6 +10,7 @@ require(shinyIncubator)    # Progress indicator
 require(shinythings)       # Password Input/Better Action buttons
 require(MESS)              # AUC Analysis
 require(ShinyHighCharts)   # Javascript charting
+require(parallel)          # Parallel Processing
 
 
 noDataPlot = function(){
@@ -346,6 +347,44 @@ shinyServer(function(input, output, session) {
 
   })
 
+
+
+
+  ############### AUC Table ###############
+  aucTable = reactive({
+    if( !is.null(REMP()) && !is.null(InCell()) && !is.null(doseCurveStats()) ){
+      # Get feature names and compound list
+      compounds = unique(REMP()$comboId)[which(unique(REMP()$comboId) != "DMSO (NA)")]
+      featureList = names(InCell()$cell)[which(!(names(InCell()$cell) %in% c("Well", "Field", "Cell")))]
+
+      # Tabulate AUCs
+      x = mapply(function(cmpd){
+        unlist(mapply(function(f){
+          if( cmpd %in% names(doseCurveStats()) && f %in% names(doseCurveStats()[[cmpd]]) ){
+            # Get the stats and concs
+            stats = round(as.numeric(unlist(doseCurveStats()[[cmpd]][[f]]['cvmts.z', ])), 3)
+            conc = round(as.numeric(log10(unlist(doseCurveStats()[[cmpd]][[f]]['conc', ]))), 2)
+            # Order by conc
+            id = order(conc)
+            # calculate the AUC
+            if( !is.na(stats) && !is.na(conc) ){
+              a=auc(x=conc[id], y=stats[id])
+              if( a < 0 ) -sqrt(abs(a)) else sqrt(abs(a))
+            }else{
+              NA
+            }
+          }
+        }, featureList, SIMPLIFY=T, USE.NAMES=F))
+      }, compounds, SIMPLIFY=F, USE.NAMES=F)
+
+      # Convert to a dataframe
+      x = t(as.data.frame(x))
+      colnames(x) = featureList
+      row.names(x) = compounds
+
+      return(x)
+    }
+  })
 
 
 
@@ -2086,42 +2125,17 @@ shinyServer(function(input, output, session) {
   ############### AUC Clustering ###############
   # All feature AUC plot
   output$clusterAUC = renderHighcharts({
-    if( !is.null(doseCurveStats()) && !is.null(REMP()) && !is.null(InCell()) ){
-      # Get feature names and compound list
+    if( !is.null(aucTable()) ){
+      # Get compound and feature lists
       compounds = unique(REMP()$comboId)[which(unique(REMP()$comboId) != "DMSO (NA)")]
       featureList = names(InCell()$cell)[which(!(names(InCell()$cell) %in% c("Well", "Field", "Cell")))]
 
-      # Tabulate AUCs
-      x = mapply(function(cmpd){
-          unlist(mapply(function(f){
-            if( cmpd %in% names(doseCurveStats()) && f %in% names(doseCurveStats()[[cmpd]]) ){
-              # Get the stats and concs
-              stats = round(as.numeric(unlist(doseCurveStats()[[cmpd]][[f]]['cvmts.z', ])), 3)
-              conc = round(as.numeric(log10(unlist(doseCurveStats()[[cmpd]][[f]]['conc', ]))), 2)
-              # Order by conc
-              id = order(conc)
-              # calculate the AUC
-              if( !is.na(stats) && !is.na(conc) ){
-                a=auc(x=conc[id], y=stats[id])
-                if( a < 0 ) -sqrt(abs(a)) else sqrt(abs(a))
-              }else{
-                NA
-              }
-            }
-          }, featureList, SIMPLIFY=T, USE.NAMES=F))
-        }, compounds, SIMPLIFY=F, USE.NAMES=F)
-
-      # Convert to a dataframe
-      x = t(as.data.frame(x))
-      colnames(x) = featureList
-      row.names(x) = compounds
-
       # calculate clusters on Compounds
-      cmpdClust = hclust(dist(x))
+      cmpdClust = hclust(dist(aucTable()))
       cmpdOrder = cmpdClust$order
 
       # Calculate clusters on features
-      featClust = hclust(dist(t(x)))
+      featClust = hclust(dist(t(aucTable())))
       featOrder = featClust$order
 
 
@@ -2133,7 +2147,7 @@ shinyServer(function(input, output, session) {
       cols = vector()
       for( i in 1:length(featOrder) ){
         for( j in 1:length(cmpdOrder) ){
-          values = c( values, x[cmpdOrder[j], featOrder[i]] )
+          values = c( values, aucTable()[cmpdOrder[j], featOrder[i]] )
           names  = c( names, paste0(compounds[cmpdOrder[j]], "<br/>", featureList[featOrder[i]], "<br/>") )
           rows   = c( rows, i-1 )
           cols   = c( cols, j-1 )
@@ -2173,7 +2187,7 @@ shinyServer(function(input, output, session) {
           tickLength=0,
           lineColor='transparent',
           title=list(
-            text="Compounds"
+            text="Features"
           ),
           labels=list(
             enabled=FALSE
@@ -2189,11 +2203,16 @@ shinyServer(function(input, output, session) {
           tickLength=0,
           lineColor='transparent',
           title=list(
-            text="Features"
+            text="Compounds"
           ),
           labels=list(
             enabled=FALSE
           )
+        ),
+
+        legend=list(
+          verticalAlign='bottom',
+          maxHeight=258
         ),
 
         colorAxis=list(
@@ -2246,6 +2265,77 @@ shinyServer(function(input, output, session) {
 
     }
   })
+
+
+
+  ############### PCA Plot ###############
+  # All feature AUC plot
+  output$pca = renderHighcharts({
+    if( !is.null(aucTable()) ){
+      # calculate pca
+      pca = prcomp(aucTable())
+
+      # get x y z data
+      plotData = apply(pca$x, 1, function(t){
+        t = unname(t)
+        list(x=t[1], y=t[2], z=t[3])
+      })
+
+
+      # Generate highchart
+      myChart=list(
+        credits=list(
+          enabled=FALSE
+        ),
+        chart=list(
+          renderTo='container',
+          margin=100,
+          type='scatter',
+          options3d=list(
+            enabled=TRUE,
+            alpha=10,
+            beta=30,
+            depth=250,
+            viewDistance=5,
+            frame=list(
+              bottom=list( size=1, color='rgba(0,0,0,0.02)' ),
+              back=list( size=1, color='rgba(0,0,0,0.04)' ),
+              side=list( size=1, color='rgba(0,0,0,0.06)' )
+            )
+          )
+        ),
+        title=list(
+          text='Principle Components'
+        ),
+        plotOptions=list(
+
+        ),
+        yAxis=list(
+          title=NULL
+        ),
+        xAxis=list(
+          gridLineWidth=1
+        ),
+        zAxis=list(
+        ),
+        legend=list(
+          enabled=FALSE
+        ),
+        series=list(
+          name='Reading',
+          data=unname(plotData)
+        )
+      )
+
+      return( list(chart=myChart) )
+
+      }
+    })
+
+
+
+
+
 
 
 
