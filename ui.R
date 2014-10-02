@@ -6,14 +6,12 @@
 #
 
 require(shiny)             # Shiny Framework
-#require(shinyIncubator)    # Progress indicator
 require(shinythings)       # Password Input/Better Action buttons
 require(ShinyHighCharts)   # Javascript charting
 
 options(shiny.maxRequestSize=45*1024^2)
 
 shinyUI(fluidPage(
-  #progressInit(),     # Initialize the Prgoress Indicator
 
   # Application title
   titlePanel("InCell Data Analysis"),

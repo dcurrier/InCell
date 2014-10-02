@@ -6,7 +6,6 @@
 #
 
 require(shiny)             # Shiny Framework
-#require(shinyIncubator)    # Progress indicator
 require(shinythings)       # Password Input/Better Action buttons
 require(MESS)              # AUC Analysis
 require(ShinyHighCharts)   # Javascript charting
