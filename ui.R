@@ -6,14 +6,14 @@
 #
 
 require(shiny)             # Shiny Framework
-require(shinyIncubator)    # Progress indicator
+#require(shinyIncubator)    # Progress indicator
 require(shinythings)       # Password Input/Better Action buttons
 require(ShinyHighCharts)   # Javascript charting
 
 options(shiny.maxRequestSize=45*1024^2)
 
 shinyUI(fluidPage(
-  progressInit(),     # Initialize the Prgoress Indicator
+  #progressInit(),     # Initialize the Prgoress Indicator
 
   # Application title
   titlePanel("InCell Data Analysis"),
@@ -44,7 +44,6 @@ shinyUI(fluidPage(
                                ),
                                conditionalPanel(
                                  condition="!output.fileUploaded && output.fileUploaded != null",
-                                 h4('Current Dataset:'),
                                  verbatimTextOutput('dataset'),
                                  hr(),
                                  textInput('ctlCols', label=h4("Control Columns"), value="example: 21-24 or 21,22,23,24"),
@@ -65,6 +64,11 @@ shinyUI(fluidPage(
                                  fluidRow(
                                    column(6, p("Cell Level Data")),
                                    column(6,  downloadButton('downCell', label="Download"))
+                                 ),
+                                 br(),
+                                 fluidRow(
+                                   column(6, p("Annotation Data")),
+                                   column(6,  downloadButton('downREMP', label="Download"))
                                  )
                                ),
                                br(),

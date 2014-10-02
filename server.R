@@ -6,7 +6,7 @@
 #
 
 require(shiny)             # Shiny Framework
-require(shinyIncubator)    # Progress indicator
+#require(shinyIncubator)    # Progress indicator
 require(shinythings)       # Password Input/Better Action buttons
 require(MESS)              # AUC Analysis
 require(ShinyHighCharts)   # Javascript charting
@@ -114,7 +114,7 @@ shinyServer(function(input, output, session) {
       })
     }else if( !is.null(input$InCellDB) && input$InCellDB %in% Dropbox()$csv && !(input$InCellDB %in%  c("Choose from Dropbox", "")) ){
       withProgress(session, min=0, max=1, {
-        setProgress(message='Parsing InCell File')
+        setProgress(message='Parsing File:')
         data = ReadInCell(input$InCellDB, progressBar=TRUE )
 
         # Return
@@ -210,7 +210,7 @@ shinyServer(function(input, output, session) {
     if( is.null(InCell()) || is.null(REMP()) ) return()
 
     withProgress(session, min=0, max=1, {
-      setProgress(message='Calculating Negative Control Distributions')
+      setProgress(message='Calculating Distribution: ')
 
       # Get the list of negative control wells
       negCtrlWells = REMP()$well[which(REMP()$SAMPLE == "DMSO")]
@@ -263,7 +263,7 @@ shinyServer(function(input, output, session) {
     if( is.null(REMP()) || is.null(InCell()) || is.null(negCtrlDist()) )  return()
 
     withProgress(session, min=0, max=1, {
-      setProgress(message='Calculating Distribution Statistics')
+      setProgress(message='Calculating Distribution:')
 
       featureList = names(InCell()$cell)[which(!(names(InCell()$cell) %in% c("Well", "Field", "Cell")))]
       compoundList = unique(REMP()$comboId)
@@ -469,6 +469,20 @@ shinyServer(function(input, output, session) {
     },
     content = function(file){
       write.csv(InCell()$cell, file=file, row.names=F)
+    }
+  )
+
+
+  ############### downREMP ###############
+  # Download Handler for REMP Lookup File
+  output$downREMP = downloadHandler(
+    filename = function(){
+      if( !is.null(input$annotation) ) name = strsplit(input$annotation[1,'name'], "[.]")[[1]]
+      if( input$annotationDB != "InCell File" ) name = strsplit(input$annotationDB, "[.]")[[1]]
+      paste(paste(name[1:length(name)-1], collapse="."), ".csv", sep = "")
+    },
+    content = function(file){
+      write.csv(REMP(), file=file, row.names=F)
     }
   )
 
