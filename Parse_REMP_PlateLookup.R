@@ -6,7 +6,7 @@
 
 Parse_REMP = function(path, ctl, noCtl){
   # Read in the data file
-  data = read.table(path, header=T, sep="\t", fill=TRUE)
+  data = read.delim(path)
 
   nPlates = length(unique(data$currplateid))
 

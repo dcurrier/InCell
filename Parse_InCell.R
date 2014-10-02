@@ -43,16 +43,18 @@ ReadInCell = function(file, tables=c("cell", "field", "well"), progressBar=FALSE
   }
 
   # Update Progress Bar
-  if( progressBar ){ eval(setProgress(value = 0.1, detail='Parsing Cell Level Data'), parent.frame(n=2)) }
+  if( progressBar ){ eval(setProgress(value = 0.1, detail='Cell Level'), parent.frame(n=2)) }
 
 
   # Get Cell Level Data
   if( "cell" %in% tables ){
     # Find data
     cell = well.field[which(well.field < fieldHead)]
+    colCount = length(strsplit(temp[cellHead+1], ",")[[1]])
 
     # Make DataFrame
-    cellData = read.csv(file, header=F, skip=cellHead, nrows=length(cell) )
+    cellData = read.csv(file, header=F, quote="", skip=cellHead, stringsAsFactors=FALSE, comment.char="",
+                        nrows=length(cell), colClasses=c('factor','integer',rep('numeric', colCount-2)) )
     head1 = strsplit(temp[cellHead-1], ",")[[1]]
     head2 = strsplit(temp[cellHead], ",")[[1]]
     header = unlist(mapply(function(t,b){
@@ -82,16 +84,18 @@ ReadInCell = function(file, tables=c("cell", "field", "well"), progressBar=FALSE
   }
 
   # Update Progress Bar
-  if( progressBar ){ eval(setProgress(value = dim(cellData)[1]/length(temp), detail='Parsing Field Level Data'), parent.frame(n=2)) }
+  if( progressBar ){ eval(setProgress(value = dim(cellData)[1]/length(temp), detail='Field Level'), parent.frame(n=2)) }
 
 
   # Get Field Level Data
   if( "field" %in% tables ){
     # Find data
     field = well.field[which(well.field > fieldHead)]
+    colCount = length(strsplit(temp[fieldHead+1], ",")[[1]])
 
     # Make DataFrame
-    fieldData = read.csv(file, header=F, skip=fieldHead, nrows=length(field) )
+    fieldData = read.csv(file, header=F, quote="", skip=fieldHead, stringsAsFactors=FALSE, comment.char="",
+                         nrows=length(field), colClasses=c('factor',rep('numeric', colCount-1)) )
     head1 = strsplit(temp[fieldHead-1], ",")[[1]]
     head2 = strsplit(temp[fieldHead], ",")[[1]]
     header = unlist(mapply(function(t,b){
@@ -122,19 +126,21 @@ ReadInCell = function(file, tables=c("cell", "field", "well"), progressBar=FALSE
   }
 
   # Update Progress Bar
-  if( progressBar ){ eval(setProgress(value = (dim(fieldData)[1]+dim(cellData)[1])/length(temp), detail='Parsing Well Level Data'), parent.frame(n=2)) }
+  if( progressBar ){ eval(setProgress(value = (dim(fieldData)[1]+dim(cellData)[1])/length(temp), detail='Well Level'), parent.frame(n=2)) }
 
 
   # Get Well Level Data
   if( "well" %in% tables ){
     # Find header
     wellHead = grep("Well,,", temp)
+    colCount = length(strsplit(temp[wellHead+2], ",")[[1]])
 
     # Find data
     well = grep("[[:upper:]] - [[:digit:]]+,", temp)
 
     # Make DataFrame
-    wellData = read.csv(file, header=F, skip=wellHead, nrows=length(well) )
+    wellData = read.csv(file, header=F, quote="", skip=wellHead, stringsAsFactors=FALSE, comment.char="",
+                        nrows=length(well), colClasses=c('factor','character',rep('numeric', colCount-2)))
     head1 = strsplit(temp[wellHead-1], ",")[[1]]
     head2 = strsplit(temp[wellHead], ",")[[1]]
     header = unlist(mapply(function(t,b){
