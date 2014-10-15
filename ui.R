@@ -93,29 +93,38 @@ shinyUI(fluidPage(
                                  modalButton(label="", styleclass="link", size="large", icon="question-circle", modal.id="AAhelp",
                                              css.class="help fa-lg")),
                              div(
-                               h4("Y Axis Feature"),
-                               selectizeInput('yFeat', label="",
-                                              choices=c("Cell Count"),
-                                              selected="Cell Count", width="100%"),
-                               fluidRow(
-                                 column(6, radioButtons('yTrans', label="Y Axis Transform",
-                                                        choices=c("None", "Log10", "Log2"))   ),
-                                 column(6,radioButtons('yThresh', label="Y Axis Threshold",
-                                                       choices=c("None", "% Above", "% Below"))   )
-                               ),
-                               uiOutput('ySlider'),
-                               hr(),
-                               h4("X Axis Feature"),
-                               selectizeInput('xFeat', label="",
-                                              choices=c("Cell Count"),
-                                              selected="Cell Count", width="100%"),
-                               fluidRow(
-                                 column(6, radioButtons('xTrans', label="X Axis Transform",
-                                                        choices=c("None", "Log10", "Log2"))   ),
-                                 column(6,radioButtons('xThresh', label="X Axis Threshold",
-                                                       choices=c("None", "% Above", "% Below"))   )
-                               ),
-                               uiOutput('xSlider'),
+                               tabsetPanel(
+                                 tabPanel('Y Axis',
+                                          div(style="height:290px;",
+                                          h4("Y Axis Feature"),
+                                          selectizeInput('yFeat', label="",
+                                                         choices=c("Cell Count"),
+                                                         selected="Cell Count", width="100%"),
+                                          fluidRow(
+                                            column(6, radioButtons('yTrans', label="Axis Transform",
+                                                                   choices=c("None", "Log10", "Log2"))   ),
+                                            column(6,radioButtons('yThresh', label="Axis Threshold",
+                                                                  choices=c("None", "% Above", "% Below"))   )
+                                          ),
+                                          uiOutput('ySlider')
+                                          )),
+                                 tabPanel('X Axis',
+                                          div(style="height:290px;",
+                                          h4("X Axis Feature"),
+                                          selectizeInput('xFeat', label="",
+                                                         choices=c("Cell Count"),
+                                                         selected="Cell Count", width="100%"),
+                                          fluidRow(
+                                            column(6, radioButtons('xTrans', label="Axis Transform",
+                                                                   choices=c("None", "Log10", "Log2"))   ),
+                                            column(6,radioButtons('xThresh', label="Axis Threshold",
+                                                                  choices=c("None", "% Above", "% Below"))   )
+                                          ),
+                                          uiOutput('xSlider')
+                                          ))
+                                 ),
+                               div(class="pull-right", actionButton('apply', label="Apply", icon="check", type="primary")),
+                               br(),
                                hr(),
                                h4("Add Lines"),
                                checkboxInput('hLineShow', label="Horizontal", value=F),
@@ -163,10 +172,10 @@ shinyUI(fluidPage(
                                selectizeInput('cmpdSelect', label=h4("Select a Compound"),
                                               choices=c(""), selected="", width="100%"),
                                fluidRow(
-                                 column(6, div( actionButton('prv', label='', styleclass='primary',
+                                 column(6, div( actionButton('prv', label='', type='primary',
                                                              icon='long-arrow-left', icon.library='font awesome'),
                                                 class="pull-left")),
-                                 column(6, div( actionButton('nxt', label='', styleclass='primary',
+                                 column(6, div( actionButton('nxt', label='', type='primary',
                                                              icon='long-arrow-right', icon.library='font awesome'),
                                                 class="pull-right"))
                                ),
@@ -187,10 +196,10 @@ shinyUI(fluidPage(
                                selectizeInput('cmpdAct', label=h4("Select a Compound"),
                                               choices=c(""), selected="", width="100%"),
                                fluidRow(
-                                 column(6, div( actionButton('prvAct', label='', styleclass='primary',
+                                 column(6, div( actionButton('prvAct', label='', type='primary',
                                                              icon='long-arrow-left', icon.library='font awesome'),
                                                 class="pull-left")),
-                                 column(6, div( actionButton('nxtAct', label='', styleclass='primary',
+                                 column(6, div( actionButton('nxtAct', label='', type='primary',
                                                              icon='long-arrow-right', icon.library='font awesome'),
                                                 class="pull-right"))
                                ),
