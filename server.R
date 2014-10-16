@@ -1085,7 +1085,6 @@ shinyServer(function(input, output, session) {
 
         }, compounds, length(compounds), SIMPLIFY=F, USE.NAMES=F)
 
-
         # Generate plotLines
         if( input$vLineShow ){
           verticalLines = list(

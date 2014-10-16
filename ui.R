@@ -130,13 +130,13 @@ shinyUI(fluidPage(
                                checkboxInput('hLineShow', label="Horizontal", value=F),
                                fluidRow(
                                  column(7, textInput('hLineName', label="", value="Label")),
-                                 column(4, offest=1, numericInput('hLine', label="", value=0))
+                                 column(4, offest=1, shiny::numericInput('hLine', label="", value=0, step=0.1))
                                ),
                                br(),
                                checkboxInput('vLineShow', label="Vertical", value=F),
                                fluidRow(
                                  column(7, textInput('vLineName', label="", value="Label")),
-                                 column(4, offest=1, numericInput('vLine', label="", value=0))
+                                 column(4, offest=1, shiny::numericInput('vLine', label="", value=0, step=0.1))
                                ),
                                class="well tab-well")),
                     ##################### Any|Conc Tab #####################
