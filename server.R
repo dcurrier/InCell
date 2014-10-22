@@ -88,7 +88,6 @@ subsetInCell = function(w, f, t){
 
 
 analyzeFeature <- function(feature, concOrder, wells, negCtrlWells, InCell, REMP, negCtrlDist, env){
-  #browser()
   negCtrlDist = negCtrlDist[[feature]]
 
   y = unlist(
@@ -139,10 +138,13 @@ analyzeFeature <- function(feature, concOrder, wells, negCtrlWells, InCell, REMP
     }, wells, concOrder$x, SIMPLIFY=T, USE.NAMES=T)
   #})
 
+  # This does not seem to be working:
   if( NA %in% unlist(t) ){
+    na.col = vector()
     for( i in 1:dim(t)[2] ){
-      if( "NA's" %in% names(summary(t[,i])) ) t = t[, -i]
+      if( "NA's" %in% names(summary(unlist(t[,i]))) ) na.col = c(na.col, i)
     }
+    t = t[, -na.col]
   }
 
   return(t)
@@ -337,14 +339,11 @@ shinyServer(function(input, output, session) {
 
     featureList = names(InCell()$cell)[which(!(names(InCell()$cell) %in% c("Well", "Field", "Cell")))]
     compoundList = unique(REMP()$comboId)
-    browser()
+
     REMP=REMP()
     InCell=InCell()
     negCtrlDist=negCtrlDist()
 
-    clust = makeCluster(getOption("cl.cores", detectCores(logical = FALSE)))
-    clusterCall(clust, require, 'shiny' )
-    clusterExport(clust, c('REMP', 'InCell', 'negCtrlDist', 'featureList', 'f_ks', 'f_cvmts', 'analyzeFeature', 'subsetInCell'))
     d=mapply(function(cmpd, progress){
       # Get the list of the wells that the selected compound is in
       conc = as.numeric(REMP$CONC[which(REMP$comboId == cmpd)])
@@ -355,7 +354,9 @@ shinyServer(function(input, output, session) {
       negCtrlWells = REMP$well[which(REMP$SAMPLE == "DMSO")]
 
       # Calculate feature districutions
-      f=clusterMap(clust, analyzeFeature, featureList, MoreArgs=list(concOrder, wells, negCtrlWells, InCell, REMP, negCtrlDist), .scheduling = "dynamic")
+      f=mapply(analyzeFeature, featureList,
+               MoreArgs=list(concOrder, wells, negCtrlWells, InCell, REMP, negCtrlDist),
+               SIMPLIFY=FALSE, USE.NAMES=TRUE)
 
       # Update Progress Bar
       inc = 1/length(compoundList)
@@ -364,7 +365,6 @@ shinyServer(function(input, output, session) {
       return(f)
 
     }, compoundList, MoreArgs=list(progress), SIMPLIFY=FALSE, USE.NAMES=TRUE)
-    stopCluster(clust)
 
     progress$set(value=1, detail="wrapping up")
 
@@ -393,6 +393,7 @@ shinyServer(function(input, output, session) {
             # calculate the AUC
             if( !is.na(stats) && !is.na(conc) ){
               a=auc(x=conc[id], y=stats[id])
+              if(is.na(a))browser()
               if( a < 0 ) -sqrt(abs(a)) else sqrt(abs(a))
             }else{
               NA
@@ -2343,19 +2344,18 @@ shinyServer(function(input, output, session) {
       pca = prcomp(aucTable())
 
       # get x y z data
-      plotData = apply(pca$x, 1, function(t){
-        t = unname(t)
-        list(x=t[1], y=t[2], z=t[3])
-      })
+      plotData = sapply(1:dim(pca$x)[1], function(n, t){
+        r = as.numeric(unname(t[n,]))
+        as.numeric(r[1:3])
+      }, pca$x, simplify=FALSE, USE.NAMES=FALSE)
 
-
+      #browser()
       # Generate highchart
       myChart=list(
         credits=list(
           enabled=FALSE
         ),
         chart=list(
-          renderTo='container',
           margin=100,
           type='scatter',
           options3d=list(
@@ -2368,29 +2368,32 @@ shinyServer(function(input, output, session) {
               bottom=list( size=1, color='rgba(0,0,0,0.02)' ),
               back=list( size=1, color='rgba(0,0,0,0.04)' ),
               side=list( size=1, color='rgba(0,0,0,0.06)' )
-            )
+           )
           )
         ),
         title=list(
           text='Principle Components'
         ),
-        plotOptions=list(
-
-        ),
+#         plotOptions=list(
+#
+#         ),
         yAxis=list(
           title=NULL
         ),
         xAxis=list(
           gridLineWidth=1
         ),
-        zAxis=list(
-        ),
+#         zAxis=list(
+#         ),
         legend=list(
           enabled=FALSE
         ),
         series=list(
-          name='Reading',
-          data=unname(plotData)
+          list(
+            name='Reading',
+            colorByPoint=TRUE,
+            data=plotData
+          )
         )
       )
 
