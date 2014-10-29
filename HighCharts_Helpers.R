@@ -1,4 +1,5 @@
-dimOtherSeries = "                  var allSeries = this.chart.series;
+dimOtherSeries = "        function(){
+                                    var allSeries = this.chart.series;
                                     HighchartsAddOn.mouseWasOver = true;
 
                                     HighchartsAddOn[this.chart.renderTo.id]=new Object();
@@ -14,18 +15,23 @@ dimOtherSeries = "                  var allSeries = this.chart.series;
                                         allSeries[i].options.color = 'rgba(241,241,241,0.4)';
                                         allSeries[i].update(allSeries[i].options);
                                       }
-                                    }  "
+                                    }
+                                    return;
+                                  }"
 
-resetAllSeries = "          if(HighchartsAddOn.mouseWasOver) {
+resetAllSeries = "          function(){
+                              if(HighchartsAddOn.mouseWasOver) {
                                     var allSeries = this.chart.series;
                                     HighchartsAddOn.mouseWasOver = false;
 
                                     for(i=0; i<allSeries.length; i++){
                                       allSeries[i].update(HighchartsAddOn[this.chart.renderTo.id][i].options);
                                     }
-                                  }  "
+                              }
+                              return;
+                            }"
 
-getPointValues="
+getPointValues="        function(){
                             var attr = { x: this.x,
                                          y: this.y,
                                          value: this.value,
@@ -34,4 +40,6 @@ getPointValues="
 
                             console.debug(this);
 
-                            Shiny.onInputChange(this.series.chart.renderTo.id, attr); "
+                            Shiny.onInputChange(this.series.chart.renderTo.id, attr);
+                            return;
+                            }"

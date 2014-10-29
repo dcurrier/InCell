@@ -129,7 +129,7 @@ analyzeFeature <- function(feature, concOrder, wells, negCtrlWells, InCell, REMP
       cn.z = (InCell$well$`Cell Count`[current] - median(InCell$well$`Cell Count`[DMSO]))/mad(InCell$well$`Cell Count`[DMSO])
 
       # Set progress bar
-      featureInc = 1/length(featureList)
+      #featureInc = 1/length(featureList)
       #incProgress(amount=featureInc)
 
       # store stats
@@ -335,7 +335,7 @@ shinyServer(function(input, output, session) {
 
     progress=shiny::Progress$new(session, min=0, max=1)
     on.exit(progress$close())
-    progress$set(message='Calculating Distribution')
+    progress$set(message='Calculating Dist.', value=0)
 
     featureList = names(InCell()$cell)[which(!(names(InCell()$cell) %in% c("Well", "Field", "Cell")))]
     compoundList = unique(REMP()$comboId)
@@ -344,7 +344,7 @@ shinyServer(function(input, output, session) {
     InCell=InCell()
     negCtrlDist=negCtrlDist()
 
-    d=mapply(function(cmpd, progress){
+    d=mapply(function(cmpd, progress, inc){
       # Get the list of the wells that the selected compound is in
       conc = as.numeric(REMP$CONC[which(REMP$comboId == cmpd)])
       concOrder = sort.int(conc, index.return=T)
@@ -359,14 +359,13 @@ shinyServer(function(input, output, session) {
                SIMPLIFY=FALSE, USE.NAMES=TRUE)
 
       # Update Progress Bar
-      inc = 1/length(compoundList)
-      progress$inc(amount=inc)
+      progress$inc(amount=inc, detail=strsplit(cmpd, " ")[[1]][1])
 
       return(f)
 
-    }, compoundList, MoreArgs=list(progress), SIMPLIFY=FALSE, USE.NAMES=TRUE)
+    }, compoundList, MoreArgs=list(progress=progress, inc=1/length(compoundList)), SIMPLIFY=FALSE, USE.NAMES=TRUE)
 
-    progress$set(value=1, detail="wrapping up")
+    #progress$set(value=1, detail="wrapping up")
 
     return(d)
   })
@@ -1073,7 +1072,7 @@ shinyServer(function(input, output, session) {
             animation=FALSE,
             name=showName,
             type="scatter",
-            data=JSONify(tryCatch(data.frame(x=as.numeric(x), y=as.numeric(y),
+            data=JSONify(tryCatch(data.frame(as.numeric(x), as.numeric(y),
                                     name=if(showName != "DMSO") paste0(prettyNum(concOrder$x, digits=3, width=4), "uM") else "DMSO",
                                     radius=if(showName != "DMSO") log10(concOrder$x)*3 else 4),
                                   error = function(e) browser() ),
@@ -1188,7 +1187,7 @@ shinyServer(function(input, output, session) {
           ),
           tooltip=list(
             enabled=FALSE,
-            formatter="return this.series.name + ' [' + this.point.name + ']<br/>X: <b>' + this.x + '</b>   Y: <b>' + this.y + '</b>'"
+            formatter="function(){return this.series.name + ' [' + this.point.name + ']<br/>X: <b>' + this.x + '</b>   Y: <b>' + this.y + '</b>'}"
           ),
           series=seriesData
         )
@@ -2343,10 +2342,12 @@ shinyServer(function(input, output, session) {
       # calculate pca
       pca = prcomp(aucTable())
 
+      #browser()
       # get x y z data
       plotData = sapply(1:dim(pca$x)[1], function(n, t){
+        n = rownames(t)[n]
         r = as.numeric(unname(t[n,]))
-        as.numeric(r[1:3])
+        list(x=as.numeric(r[1]), y=as.numeric(r[2]), z=as.numeric(r[3]), name=n)
       }, pca$x, simplify=FALSE, USE.NAMES=FALSE)
 
       #browser()
@@ -2374,23 +2375,21 @@ shinyServer(function(input, output, session) {
         title=list(
           text='Principle Components'
         ),
-#         plotOptions=list(
-#
-#         ),
         yAxis=list(
           title=NULL
         ),
         xAxis=list(
           gridLineWidth=1
         ),
-#         zAxis=list(
-#         ),
         legend=list(
           enabled=FALSE
         ),
+        tooltip=list(
+          headerFormat='{name} <br/>',
+          pointFormat= 'PC1: <b>{x}</b><br/>PC2: <b>{y}</b><br/>PC3: <b>{z}</b><br/>'
+        ),
         series=list(
           list(
-            name='Reading',
             colorByPoint=TRUE,
             data=plotData
           )
